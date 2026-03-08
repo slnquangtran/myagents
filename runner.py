@@ -27,9 +27,16 @@ class Bus:
         self.context = {}
 
 class BrainstormAgent(threading.Thread):
+    """Simulates a collaborative session between specialized personas."""
     def __init__(self, bus: Bus):
         super().__init__(daemon=True)
         self.bus = bus
+        self.personas = [
+            {"name": "Alice (Analyst)", "focus": "Requirements & User Intent"},
+            {"name": "Bob (Architect)", "focus": "System Design & Safety"},
+            {"name": "Charlie (Coder)", "focus": "Implementation & Logic"}
+        ]
+
     def run(self):
         while not self.bus.stop_event.is_set():
             try:
@@ -37,21 +44,37 @@ class BrainstormAgent(threading.Thread):
             except queue.Empty:
                 continue
             
-            self.bus.log_queue.put(f"Brainstorming for goal: '{goal[:50]}...'")
+            self.bus.log_queue.put(f"?? [BRAINSTORM] Goal received: '{goal}'")
+            time.sleep(1.0)
+
+            # Stage 1: Alice Analyzes
+            self.bus.log_queue.put(f"?? {self.personas[0]['name']} is analyzing the scope...")
+            time.sleep(1.5)
+            analysis_task = {"type": "analyze", "desc": f"Define core requirements for {goal}", "contributed_by": self.personas[0]['name']}
+            
+            # Stage 2: Bob Suggests Architecture
+            self.bus.log_queue.put(f"?? {self.personas[1]['name']} is suggesting a system structure...")
+            time.sleep(1.5)
+            arch_task = {"type": "review", "desc": f"Design modular architecture for {goal}", "contributed_by": self.personas[1]['name']}
+
+            # Stage 3: Charlie Plans Implementation
+            self.bus.log_queue.put(f"?? {self.personas[2]['name']} is mapping out the code modules...")
+            time.sleep(1.5)
+            code_task = {"type": "generate", "desc": f"Implement main logic for {goal}", "contributed_by": self.personas[2]['name']}
+
+            # Stage 4: Collective Refinement
+            self.bus.log_queue.put("?? [TEAM] Finalizing the task roadmap...")
             time.sleep(1.0)
             
-            sub_tasks = [
-                {"type": "analyze", "desc": "Analyze requirements for: " + goal},
-                {"type": "generate", "desc": "Draft code for: " + goal},
-                {"type": "review", "desc": "Review solution for: " + goal},
-                {"type": "generate", "desc": "Optimize final script for: " + goal},
-                {"type": "review", "desc": "Security check for: " + goal},
-                {"type": "analyze", "desc": "Final analysis for: " + goal}
-            ]
-            
-            for i, st in enumerate(sub_tasks):
-                task = {"raw_id": f"sub-{i}", "payload": st['desc'], "type": st['type']}
+            for i, st in enumerate([analysis_task, arch_task, code_task]):
+                task = {
+                    "raw_id": f"sub-{i}", 
+                    "payload": st['desc'], 
+                    "type": st['type'],
+                    "contributed_by": st['contributed_by']
+                }
                 self.bus.raw_queue.put(task)
+                self.bus.log_queue.put(f"? Created Task: {st['type'].upper()} (Idea by {st['contributed_by']})")
             
             self.bus.goal_queue.task_done()
 
@@ -70,9 +93,10 @@ class ManagerAgent(threading.Thread):
                 "task_id": f"task-{raw_item['raw_id']}",
                 "type": raw_item['type'],
                 "payload": raw_item['payload'],
+                "contributed_by": raw_item['contributed_by'],
                 "status": "pending"
             }
-            self.bus.log_queue.put(f"Manager: Assigned {task['task_id']} to OpenCode Engine")
+            self.bus.log_queue.put(f"?? [MANAGER] Routing '{task['task_id']}' to specialized Worker...")
             self.bus.task_queue.put(task)
             self.bus.raw_queue.task_done()
 
@@ -98,24 +122,24 @@ class WorkerAgent(threading.Thread):
                 continue
             
             task_id = task.get('task_id')
-            self.bus.log_queue.put(f"Worker-{self.worker_id}: Processing {task_id}...")
-            time.sleep(random.uniform(0.5, 1.0))
+            contributor = task.get('contributed_by')
+            
+            self.bus.log_queue.put(f"?? [WORKER-{self.worker_id}] Executing {contributor}'s idea: {task_id}")
+            time.sleep(random.uniform(2.0, 4.0))
 
-            # Simulate a 50% chance for test purposes
-            if random.random() < 0.50:
+            if random.random() < 0.10:
                 self.bus.exhausted = True
-                self.bus.log_queue.put(f"Worker-{self.worker_id}: [ERROR] Agent Reply: 'System error: Out of tokens for this session.'")
-                self.bus.log_queue.put("SYSTEM: Switching to Fallback Agents (Antigravity, Gemini, Cursor, Claude)")
+                self.bus.log_queue.put(f"?? [WORKER-{self.worker_id}] API ERROR: 'Out of tokens for this session.'")
                 self.bus.task_queue.task_done()
                 continue
 
-            result = f"Processed {task['type']} successfully via OpenCode Engine."
+            result = f"Result of {task['type'].upper()}: Successfully executed the proposal from {contributor}."
             task['result'] = result
             task['status'] = 'completed'
             
             self.bus.result_queue.put(task)
             self.bus.task_queue.task_done()
-            self.bus.log_queue.put(f"Worker-{self.worker_id}: {task_id} finished.")
+            self.bus.log_queue.put(f"? [WORKER-{self.worker_id}] {task_id} COMPLETED.")
 
     def stop(self):
         if self.opencode_team:
@@ -143,24 +167,17 @@ class ResultAgent(threading.Thread):
             self.bus.result_queue.task_done()
 
     def generate_handover(self, results):
-        # 1. Gemini CLI Handover
         with open("GEMINI_HANDOVER.md", 'w') as f:
-            f.write("# AGENT HANDOVER: TOKEN DEPLETION DETECTED\n")
-            f.write("The current team has exhausted its budget. Please take over the following state:\n\n")
-            f.write(f"Completed Tasks: {len(results)}\n")
-            f.write("Latest results are in `results.json`.\n")
-            f.write("Target App: `Antigravity` at `system-prompts-and-models-of-ai-tools/Google/Antigravity`.\n")
-
-        # 2. Claude/Cursor Prompt
-        with open("PROMPT_FOR_CLAUDE.txt", 'w') as f:
-            f.write("I am moving this task to you because my local agent team ran out of tokens.\n")
-            f.write("Here is what we have so far:\n")
+            f.write("# AGENT HANDOVER: TOKEN DEPLETION\n")
+            f.write("Progress was halted. Here is the contribution log:\n\n")
             for res in results:
-                f.write(f"- {res['task_id']}: {res['result']}\n")
-            f.write("\nPlease finish the implementation based on these results.")
+                f.write(f"- {res['contributed_by']}: {res['task_id']} (DONE)\n")
         
-        self.bus.log_queue.put("SYSTEM: [SUCCESS] Handover files generated for Gemini CLI, Claude, and Cursor.")
-        self.bus.log_queue.put("SYSTEM: [ANTIGRAVITY] Initiating escape velocity protocols...")
+        with open("PROMPT_FOR_CLAUDE.txt", 'w') as f:
+            f.write("Handover from MyAgents Studio.\n")
+            f.write(f"Completed contributions from Alice, Bob, and Charlie: {len(results)}\n")
+        
+        self.bus.log_queue.put("?? [SYSTEM] Handover files generated. Switching to external agents...")
 
 class LoggerAgent(threading.Thread):
     def __init__(self, bus: Bus, on_log: Optional[Callable[[str], None]] = None):
@@ -193,13 +210,11 @@ class Team:
 def run_team(goal: str, config: Optional[Dict[str, Any]] = None, on_log: Optional[Callable[[str], None]] = None) -> Team:
     bus = Bus()
     bus.goal_queue.put(goal)
-    
     brainstormer = BrainstormAgent(bus)
     manager = ManagerAgent(bus)
     workers = [WorkerAgent(bus, i) for i in range(int(config.get("workers", 2)) if config else 2)]
     result_saver = ResultAgent(bus)
     logger = LoggerAgent(bus, on_log=on_log)
-    
     threads = [brainstormer, manager, result_saver, logger] + workers
     for t in threads:
         t.start()
