@@ -2,7 +2,7 @@
 
 An autonomous, local-first multi-agent runner designed for brainstorming and executing complex tasks using an "OpenCode-style" architecture.
 
-## ?? Key Features
+## Key Features
 - **Collaborative Brainstorming**: A specialized team of AI agents (Alice, Bob, and Charlie) decomposes your high-level goal into actionable sub-tasks.
 - **OpenCode Execution Engine**: Integrated with the `opencode_ui` runner for parallel task processing.
 - **Autonomous Orchestration**: A `ManagerAgent` dynamically routes tasks to specialized `WorkerAgents`.
@@ -14,7 +14,7 @@ An autonomous, local-first multi-agent runner designed for brainstorming and exe
 - `tkinter` (usually bundled with Python)
 - `opencode_ui` (must be in the same parent directory)
 
-## ?? How to Run (Windows)
+## How to Run (Windows)
 
 ### **Option 1: PowerShell (Recommended)**
 ```powershell
@@ -28,7 +28,7 @@ set PYTHONPATH=. &&
 python -m myagents.app
 ```
 
-## ?? Project Structure
+## Project Structure
 - `app.py`: The Tkinter-based GUI.
 - `runner.py`: The core agent logic and execution bus.
 - `results.json`: Consolidated output of all completed tasks.
