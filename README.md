@@ -1,4 +1,4 @@
-# MyAgents Studio – Autonomous Multi-Agent Team
+# MyAgents Studio â€“ Autonomous Multi-Agent Team
 
 An autonomous, local-first multi-agent runner designed for brainstorming and executing complex tasks using an "OpenCode-style" architecture.
 
@@ -18,15 +18,13 @@ An autonomous, local-first multi-agent runner designed for brainstorming and exe
 
 ### **Option 1: PowerShell (Recommended)**
 ```powershell
-# From the C:\Users\Quang\Desktop\Exp folder:
-$env:PYTHONPATH = "."
+$env:PYTHONPATH = ".";
 python -m myagents.app
 ```
 
 ### **Option 2: Command Prompt (CMD)**
 ```cmd
-# From the C:\Users\Quang\Desktop\Exp folder:
-set PYTHONPATH=.
+set PYTHONPATH=. &&
 python -m myagents.app
 ```
 
