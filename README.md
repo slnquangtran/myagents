@@ -9,7 +9,7 @@ An autonomous, local-first multi-agent runner designed for brainstorming and exe
 - **Intelligent Fallback**: Automatically detects "Out of Tokens" scenarios and generates handover files (`GEMINI_HANDOVER.md` and `PROMPT_FOR_CLAUDE.txt`).
 - **Real-time Observability**: A modern, dark-mode GUI with rich emojis and status tracking.
 
-## ??? Requirements
+## Requirements
 - Python 3.10+
 - `tkinter` (usually bundled with Python)
 - `opencode_ui` (must be in the same parent directory)
