@@ -88,8 +88,8 @@ ipcMain.handle('save-settings', (event, settings) => {
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
   return new Promise((resolve, reject) => {
     try {
-      const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-      const args = process.platform === 'win32' ? ['/Q'] : [];
+      const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
+      const args = process.platform === 'win32' ? ['-NoExit', '-Command'] : [];
       
       const proc = spawn(shell, args, {
         cwd: cwd || process.cwd(),
@@ -121,6 +121,7 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
       });
 
       proc.on('error', (err) => {
+        console.error(`[CmdMana] Shell error: ${err.message}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('shell-error', { tabId, error: err.message });
         }
