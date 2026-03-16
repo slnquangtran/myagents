@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <title>CmdMana - AI Agent CLI Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div class="toolbar">
+      <button id="addAgentBtn" class="toolbar-btn">
+        <span class="icon">+</span>
+        Add Agent
+      </button>
+      <button id="manageAgentsBtn" class="toolbar-btn">
+        <span class="icon">⚙</span>
+        Manage Agents
+      </button>
+      <div class="toolbar-spacer"></div>
+      <button id="themeToggleBtn" class="toolbar-btn">
+        <span class="icon">🌙</span>
+        Theme
+      </button>
+    </div>
+
+    <div class="tab-bar" id="tabBar">
+      <div class="tabs-container" id="tabsContainer"></div>
+      <button class="add-tab-btn" id="newTabBtn" title="New Tab">+</button>
+    </div>
+
+    <div class="main-content">
+      <div class="terminal-panel" id="terminalPanel">
+        <div class="terminal-output" id="terminalOutput"></div>
+        <div class="terminal-input-container">
+          <span class="prompt-symbol">$</span>
+          <input type="text" class="terminal-input" id="terminalInput" placeholder="Enter command..." autocomplete="off">
+          <button class="run-btn" id="runBtn">Run</button>
+          <button class="stop-btn" id="stopBtn" title="Stop Process">Stop</button>
+          <button class="clear-btn" id="clearBtn" title="Clear">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+      <span class="status-item" id="statusText">Ready</span>
+      <span class="status-spacer"></span>
+      <span class="status-item" id="tabCount">0 tabs</span>
+    </div>
+  </div>
+
+  <div class="modal" id="agentModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Agent</h2>
+        <button class="modal-close" id="closeModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="agentName">Agent Name</label>
+          <input type="text" id="agentName" placeholder="e.g., Claude CLI">
+        </div>
+        <div class="form-group">
+          <label for="agentCommand">Command</label>
+          <input type="text" id="agentCommand" placeholder="e.g., claude">
+        </div>
+        <div class="form-group">
+          <label for="agentArgs">Arguments (optional)</label>
+          <input type="text" id="agentArgs" placeholder="e.g., --verbose">
+        </div>
+        <div class="form-group">
+          <label for="agentCwd">Working Directory</label>
+          <div class="input-with-button">
+            <input type="text" id="agentCwd" placeholder="Default: current directory">
+            <button id="browseCwd" class="btn-small">Browse</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="agentEnv">Environment Variables (KEY=VALUE, one per line)</label>
+          <textarea id="agentEnv" rows="3" placeholder="API_KEY=your_key&#10;DEBUG=true"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelModal">Cancel</button>
+        <button class="btn-primary" id="saveAgent">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="manageModal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2>Manage Agents</h2>
+        <button class="modal-close" id="closeManageModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="agent-list" id="agentList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="closeManageBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmModal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h2>Confirm</h2>
+        <button class="modal-close" id="closeConfirmModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage">Are you sure?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="confirmCancel">Cancel</button>
+        <button class="btn-danger" id="confirmOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "name": "cmdmana",
+  "version": "1.0.0",
+  "description": "AI Agent CLI Manager - Run multiple AI agents in tabs",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder --win --x64",
+    "pack": "electron-builder --dir"
+  },
+  "keywords": ["ai", "cli", "agent", "terminal", "manager"],
+  "author": "Quang",
+  "license": "MIT",
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.cmdmana.app",
+    "productName": "CmdMana",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "files": [
+      "src/**/*"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "electronDist": "node_modules/electron/dist",
+    "electronVersion": "31.0.0"
+  }
+}
