@@ -6,10 +6,9 @@ const Store = require('electron-store');
 const store = new Store({
   name: 'cmdmana-config',
   defaults: {
-    agents: [],
     settings: {
       theme: 'dark',
-      defaultShell: 'cmd'
+      shell: 'cmd.exe'
     },
     windowState: {
       width: 1200,
@@ -20,7 +19,6 @@ const store = new Store({
 
 let mainWindow = null;
 const processes = new Map();
-let processIdCounter = 0;
 
 function createWindow() {
   const windowState = store.get('windowState');
@@ -28,8 +26,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: windowState.width || 1200,
     height: windowState.height || 800,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 600,
+    minHeight: 400,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -43,7 +41,7 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    console.log('[CmdMana] Application started successfully');
+    console.log('[CmdMana] Application started');
   });
 
   mainWindow.on('resize', () => {
@@ -78,34 +76,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('get-agents', () => {
-  return store.get('agents', []);
-});
-
-ipcMain.handle('save-agent', (event, agent) => {
-  const agents = store.get('agents', []);
-  const existingIndex = agents.findIndex(a => a.id === agent.id);
-  
-  if (existingIndex >= 0) {
-    agents[existingIndex] = agent;
-  } else {
-    agent.id = Date.now().toString();
-    agents.push(agent);
-  }
-  
-  store.set('agents', agents);
-  return agents;
-});
-
-ipcMain.handle('delete-agent', (event, agentId) => {
-  const agents = store.get('agents', []);
-  const filtered = agents.filter(a => a.id !== agentId);
-  store.set('agents', filtered);
-  return filtered;
-});
-
 ipcMain.handle('get-settings', () => {
-  return store.get('settings', { theme: 'dark', defaultShell: 'cmd' });
+  return store.get('settings', { theme: 'dark', shell: 'cmd.exe' });
 });
 
 ipcMain.handle('save-settings', (event, settings) => {
@@ -113,65 +85,54 @@ ipcMain.handle('save-settings', (event, settings) => {
   return settings;
 });
 
-ipcMain.handle('spawn-process', async (event, { tabId, command, args, cwd, env }) => {
+ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
   return new Promise((resolve, reject) => {
     try {
-      const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh';
-      const shellArgs = process.platform === 'win32' ? ['/c', command, ...args] : ['-c', command, ...args];
+      const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
+      const args = process.platform === 'win32' ? ['/Q'] : [];
       
-      const proc = spawn(shell, shellArgs, {
+      const proc = spawn(shell, args, {
         cwd: cwd || process.cwd(),
-        env: { ...process.env, ...env },
-        windowsHide: false
+        env: process.env,
+        windowsHide: false,
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      const procId = ++processIdCounter;
       processes.set(tabId, proc);
 
       proc.stdout.on('data', (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process-output', { tabId, data: data.toString(), type: 'stdout' });
+          mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
         }
       });
 
       proc.stderr.on('data', (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process-output', { tabId, data: data.toString(), type: 'stderr' });
+          mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
         }
       });
 
       proc.on('close', (code) => {
         processes.delete(tabId);
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process-exit', { tabId, code });
+          mainWindow.webContents.send('shell-exit', { tabId, code });
         }
       });
 
       proc.on('error', (err) => {
-        processes.delete(tabId);
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process-error', { tabId, error: err.message });
+          mainWindow.webContents.send('shell-error', { tabId, error: err.message });
         }
       });
 
-      console.log(`[CmdMana] Process spawned for tab ${tabId}: ${command}`);
-      resolve({ procId, pid: proc.pid });
+      console.log(`[CmdMana] Shell spawned for tab ${tabId}`);
+      resolve({ pid: proc.pid });
     } catch (error) {
-      console.error(`[CmdMana] Failed to spawn process: ${error.message}`);
+      console.error(`[CmdMana] Failed to spawn shell: ${error.message}`);
       reject(error);
     }
   });
-});
-
-ipcMain.handle('kill-process', (event, tabId) => {
-  const proc = processes.get(tabId);
-  if (proc && !proc.killed) {
-    proc.kill();
-    processes.delete(tabId);
-    console.log(`[CmdMana] Process killed for tab ${tabId}`);
-    return true;
-  }
-  return false;
 });
 
 ipcMain.handle('send-input', (event, { tabId, data }) => {
@@ -183,9 +144,19 @@ ipcMain.handle('send-input', (event, { tabId, data }) => {
   return false;
 });
 
-ipcMain.handle('is-process-running', (event, tabId) => {
+ipcMain.handle('kill-shell', (event, tabId) => {
   const proc = processes.get(tabId);
-  return proc && !proc.killed;
+  if (proc && !proc.killed) {
+    proc.kill();
+    processes.delete(tabId);
+    console.log(`[CmdMana] Shell killed for tab ${tabId}`);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('get-platform', () => {
+  return process.platform;
 });
 
 ipcMain.handle('select-directory', async () => {
@@ -193,8 +164,4 @@ ipcMain.handle('select-directory', async () => {
     properties: ['openDirectory']
   });
   return result.filePaths[0] || null;
-});
-
-ipcMain.handle('get-platform', () => {
-  return process.platform;
 });

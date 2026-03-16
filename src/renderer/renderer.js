@@ -4,12 +4,9 @@ class CmdManaApp {
   constructor() {
     this.tabs = [];
     this.activeTabId = null;
-    this.agents = [];
-    this.settings = { theme: 'dark', defaultShell: 'cmd' };
+    this.tabCounter = 0;
     this.commandHistory = [];
     this.historyIndex = -1;
-    this.editingAgentId = null;
-    this.confirmCallback = null;
     
     this.init();
   }
@@ -19,126 +16,91 @@ class CmdManaApp {
     this.bindEvents();
     this.setupIpcListeners();
     await this.loadSettings();
-    await this.loadAgents();
-    this.renderAgentList();
     
-    if (this.agents.length > 0) {
-      this.createTab(this.agents[0]);
-    } else {
-      this.showEmptyState();
-    }
+    this.createTab();
   }
 
   bindElements() {
     this.elements = {
-      tabBar: document.getElementById('tabsContainer'),
+      tabsContainer: document.getElementById('tabsContainer'),
       newTabBtn: document.getElementById('newTabBtn'),
       terminalOutput: document.getElementById('terminalOutput'),
       terminalInput: document.getElementById('terminalInput'),
-      runBtn: document.getElementById('runBtn'),
-      stopBtn: document.getElementById('stopBtn'),
-      clearBtn: document.getElementById('clearBtn'),
       statusText: document.getElementById('statusText'),
-      tabCount: document.getElementById('tabCount'),
-      addAgentBtn: document.getElementById('addAgentBtn'),
-      manageAgentsBtn: document.getElementById('manageAgentsBtn'),
-      themeToggleBtn: document.getElementById('themeToggleBtn'),
-      agentModal: document.getElementById('agentModal'),
-      modalTitle: document.getElementById('modalTitle'),
-      agentName: document.getElementById('agentName'),
-      agentCommand: document.getElementById('agentCommand'),
-      agentArgs: document.getElementById('agentArgs'),
-      agentCwd: document.getElementById('agentCwd'),
-      agentEnv: document.getElementById('agentEnv'),
-      browseCwd: document.getElementById('browseCwd'),
-      saveAgent: document.getElementById('saveAgent'),
-      cancelModal: document.getElementById('cancelModal'),
-      closeModal: document.getElementById('closeModal'),
-      manageModal: document.getElementById('manageModal'),
-      closeManageModal: document.getElementById('closeManageModal'),
-      closeManageBtn: document.getElementById('closeManageBtn'),
-      agentList: document.getElementById('agentList'),
-      confirmModal: document.getElementById('confirmModal'),
-      confirmMessage: document.getElementById('confirmMessage'),
-      confirmCancel: document.getElementById('confirmCancel'),
-      confirmOk: document.getElementById('confirmOk'),
-      closeConfirmModal: document.getElementById('closeConfirmModal')
+      tabCount: document.getElementById('tabCount')
     };
   }
 
   bindEvents() {
-    this.elements.newTabBtn.addEventListener('click', () => this.showAddAgentModal());
-    this.elements.addAgentBtn.addEventListener('click', () => this.showAddAgentModal());
-    this.elements.manageAgentsBtn.addEventListener('click', () => this.showManageModal());
-    this.elements.themeToggleBtn.addEventListener('click', () => this.toggleTheme());
-    
-    this.elements.runBtn.addEventListener('click', () => this.runCommand());
-    this.elements.stopBtn.addEventListener('click', () => this.stopProcess());
-    this.elements.clearBtn.addEventListener('click', () => this.clearTerminal());
+    this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     
     this.elements.terminalInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        this.runCommand();
+        this.sendCommand();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         this.navigateHistory(-1);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         this.navigateHistory(1);
+      } else if (e.key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        this.sendCtrlC();
       }
     });
     
-    this.elements.saveAgent.addEventListener('click', () => this.saveAgent());
-    this.elements.cancelModal.addEventListener('click', () => this.hideAgentModal());
-    this.elements.closeModal.addEventListener('click', () => this.hideAgentModal());
-    
-    this.elements.closeManageModal.addEventListener('click', () => this.hideManageModal());
-    this.elements.closeManageBtn.addEventListener('click', () => this.hideManageModal());
-    
-    this.elements.confirmCancel.addEventListener('click', () => this.hideConfirmModal());
-    this.elements.confirmOk.addEventListener('click', () => this.confirmAction());
-    this.elements.closeConfirmModal.addEventListener('click', () => this.hideConfirmModal());
-    
-    this.elements.browseCwd.addEventListener('click', async () => {
-      const dir = await api.selectDirectory();
-      if (dir) {
-        this.elements.agentCwd.value = dir;
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 't') {
+        e.preventDefault();
+        this.createTab();
+      } else if (e.ctrlKey && e.key === 'w') {
+        e.preventDefault();
+        if (this.activeTabId) {
+          this.closeTab(this.activeTabId);
+        }
+      } else if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        this.switchToNextTab();
       }
     });
   }
 
   setupIpcListeners() {
-    api.onProcessOutput(({ tabId, data, type }) => {
-      if (tabId === this.activeTabId) {
-        this.appendOutput(data, type);
-      }
-    });
-    
-    api.onProcessExit(({ tabId, code }) => {
+    api.onShellOutput(({ tabId, data }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
-        tab.running = false;
-        this.updateTabStatus(tabId);
-        this.appendOutput(`\n[Process exited with code ${code}]\n`, 'system');
-        
+        tab.output += data;
         if (tabId === this.activeTabId) {
-          this.elements.stopBtn.disabled = true;
-          this.setStatus(`Process exited (code: ${code})`);
+          this.renderOutput();
         }
       }
     });
     
-    api.onProcessError(({ tabId, error }) => {
+    api.onShellExit(({ tabId, code }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
-        tab.running = false;
-        this.updateTabStatus(tabId);
+        tab.active = false;
+        tab.output += `\n[Process exited with code ${code}]\n`;
         
         if (tabId === this.activeTabId) {
-          this.appendOutput(`\n[Error: ${error}]\n`, 'stderr');
-          this.elements.stopBtn.disabled = true;
+          this.renderOutput();
+          this.setStatus('Process exited');
+        }
+        this.updateTabStatus(tabId);
+      }
+    });
+    
+    api.onShellError(({ tabId, error }) => {
+      const tab = this.tabs.find(t => t.id === tabId);
+      if (tab) {
+        tab.active = false;
+        tab.output += `\n[Error: ${error}]\n`;
+        
+        if (tabId === this.activeTabId) {
+          this.renderOutput();
           this.setStatus(`Error: ${error}`);
         }
+        this.updateTabStatus(tabId);
       }
     });
   }
@@ -147,33 +109,44 @@ class CmdManaApp {
     this.settings = await api.getSettings();
   }
 
-  async loadAgents() {
-    this.agents = await api.getAgents();
-  }
-
-  createTab(agent) {
-    const tabId = Date.now().toString();
+  async createTab() {
+    this.tabCounter++;
+    const tabId = 'tab-' + this.tabCounter;
     const tab = {
       id: tabId,
-      name: agent.name,
-      agentId: agent.id,
-      command: agent.command,
-      args: agent.args || '',
-      cwd: agent.cwd || '',
-      env: agent.env || {},
-      running: false,
-      output: []
+      name: `CMD ${this.tabCounter}`,
+      output: '',
+      active: false,
+      pid: null
     };
     
     this.tabs.push(tab);
     this.renderTabs();
+    await this.spawnShell(tabId);
     this.switchTab(tabId);
-    this.setStatus(`Tab created: ${agent.name}`);
     this.updateTabCount();
+    this.setStatus('Ready');
+  }
+
+  async spawnShell(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    
+    try {
+      const result = await api.spawnShell({ tabId });
+      tab.pid = result.pid;
+      tab.active = true;
+      this.updateTabStatus(tabId);
+      this.setStatus(`PID: ${result.pid}`);
+    } catch (error) {
+      tab.output += `[Failed to start shell: ${error.message}]\n`;
+      this.renderOutput();
+      this.setStatus(`Error: ${error.message}`);
+    }
   }
 
   renderTabs() {
-    this.elements.tabBar.innerHTML = '';
+    this.elements.tabsContainer.innerHTML = '';
     
     this.tabs.forEach(tab => {
       const tabEl = document.createElement('div');
@@ -181,7 +154,7 @@ class CmdManaApp {
       tabEl.dataset.tabId = tab.id;
       
       tabEl.innerHTML = `
-        <span class="tab-status ${tab.running ? 'running' : ''}"></span>
+        <span class="tab-status ${tab.active ? 'running' : ''}"></span>
         <span class="tab-name">${tab.name}</span>
         <button class="tab-close" title="Close tab">&times;</button>
       `;
@@ -197,148 +170,85 @@ class CmdManaApp {
         this.closeTab(tab.id);
       });
       
-      this.elements.tabBar.appendChild(tabEl);
+      this.elements.tabsContainer.appendChild(tabEl);
     });
   }
 
   switchTab(tabId) {
     this.activeTabId = tabId;
     this.renderTabs();
-    this.renderTerminalOutput();
+    this.renderOutput();
+    this.elements.terminalInput.focus();
     
     const tab = this.tabs.find(t => t.id === tabId);
     if (tab) {
-      this.elements.stopBtn.disabled = !tab.running;
-      this.setStatus(tab.running ? `Running: ${tab.name}` : `Ready: ${tab.name}`);
+      this.setStatus(tab.active ? `PID: ${tab.pid}` : 'Ready');
     }
   }
 
-  renderTerminalOutput() {
+  switchToNextTab() {
+    if (this.tabs.length <= 1) return;
+    
+    const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+    const nextIndex = (currentIndex + 1) % this.tabs.length;
+    this.switchTab(this.tabs[nextIndex].id);
+  }
+
+  renderOutput() {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (!tab) {
       this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>No tab selected</p></div>';
       return;
     }
     
-    this.elements.terminalOutput.innerHTML = tab.output.map(line => 
-      `<div class="line ${line.type}">${this.escapeHtml(line.text)}</div>`
-    ).join('');
+    this.elements.terminalOutput.innerHTML = this.escapeHtml(tab.output);
     this.scrollToBottom();
-  }
-
-  appendOutput(text, type = 'stdout') {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab) return;
-    
-    const lines = text.split('\n');
-    lines.forEach(line => {
-      if (line || lines.length > 1) {
-        tab.output.push({ text: line || '\n', type });
-      }
-    });
-    
-    if (tab.id === this.activeTabId) {
-      this.renderTerminalOutput();
-    }
-  }
-
-  clearTerminal() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (tab) {
-      tab.output = [];
-      this.renderTerminalOutput();
-      this.appendOutput('[Terminal cleared]\n', 'system');
-    }
   }
 
   scrollToBottom() {
     this.elements.terminalOutput.scrollTop = this.elements.terminalOutput.scrollHeight;
   }
 
-  async runCommand() {
-    const command = this.elements.terminalInput.value.trim();
-    if (!command) return;
+  async sendCommand() {
+    const command = this.elements.terminalInput.value;
+    if (!command.trim()) return;
     
     const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab) return;
+    if (!tab || !tab.active) {
+      this.elements.terminalInput.value = '';
+      return;
+    }
     
     this.commandHistory.push(command);
     this.historyIndex = this.commandHistory.length;
-    this.elements.terminalInput.value = '';
     
-    this.appendOutput(`$ ${command}\n`, 'command');
-    
-    try {
-      const args = tab.args ? tab.args.split(' ').filter(a => a) : [];
-      const env = this.parseEnv(tab.env);
-      
-      await api.spawnProcess({
-        tabId: tab.id,
-        command: command,
-        args: args,
-        cwd: tab.cwd || undefined,
-        env: env
-      });
-      
-      tab.running = true;
-      this.elements.stopBtn.disabled = false;
-      this.updateTabStatus(tab.id);
-      this.setStatus(`Running: ${command}`);
-    } catch (error) {
-      this.appendOutput(`[Failed to start: ${error.message}]\n`, 'stderr');
-      this.setStatus(`Error: ${error.message}`);
-    }
-  }
-
-  async stopProcess() {
-    if (!this.activeTabId) return;
-    
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab || !tab.running) return;
-    
-    const killed = await api.killProcess(this.activeTabId);
-    if (killed) {
-      tab.running = false;
-      this.elements.stopBtn.disabled = true;
-      this.updateTabStatus(this.activeTabId);
-      this.appendOutput('\n[Process terminated]\n', 'system');
-      this.setStatus('Process terminated');
-    }
-  }
-
-  parseEnv(envStr) {
-    if (!envStr) return {};
-    const env = {};
-    envStr.split('\n').forEach(line => {
-      const [key, ...valueParts] = line.split('=');
-      if (key && valueParts.length > 0) {
-        env[key.trim()] = valueParts.join('=').trim();
-      }
+    await api.sendInput({
+      tabId: this.activeTabId,
+      data: command + '\r\n'
     });
-    return env;
+    
+    this.elements.terminalInput.value = '';
   }
 
-  updateTabStatus(tabId) {
-    const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
-    if (tabEl) {
-      const statusEl = tabEl.querySelector('.tab-status');
-      const tab = this.tabs.find(t => t.id === tabId);
-      statusEl.className = `tab-status ${tab.running ? 'running' : ''}`;
-    }
+  async sendCtrlC() {
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!tab || !tab.active) return;
+    
+    await api.sendInput({
+      tabId: this.activeTabId,
+      data: '\x03'
+    });
   }
 
-  closeTab(tabId) {
+  async closeTab(tabId) {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) return;
     
-    if (tab.running) {
-      this.showConfirm('This tab has a running process. Are you sure you want to close it?', async () => {
-        await api.killProcess(tabId);
-        this.removeTab(tabId);
-      });
-    } else {
-      this.removeTab(tabId);
+    if (tab.active) {
+      await api.killShell(tabId);
     }
+    
+    this.removeTab(tabId);
   }
 
   removeTab(tabId) {
@@ -353,7 +263,7 @@ class CmdManaApp {
         this.switchTab(this.tabs[newIndex].id);
       } else {
         this.activeTabId = null;
-        this.showEmptyState();
+        this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>Click + to create a new CMD tab</p></div>';
       }
     }
     
@@ -362,19 +272,17 @@ class CmdManaApp {
     this.setStatus('Tab closed');
   }
 
-  updateTabCount() {
-    this.elements.tabCount.textContent = `${this.tabs.length} tab${this.tabs.length !== 1 ? 's' : ''}`;
+  updateTabStatus(tabId) {
+    const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (tabEl) {
+      const statusEl = tabEl.querySelector('.tab-status');
+      const tab = this.tabs.find(t => t.id === tabId);
+      statusEl.className = `tab-status ${tab.active ? 'running' : ''}`;
+    }
   }
 
-  showEmptyState() {
-    this.elements.terminalOutput.innerHTML = `
-      <div class="empty-state">
-        <p>No agent configured yet</p>
-        <button class="btn-primary" onclick="app.showAddAgentModal()">Add Your First Agent</button>
-      </div>
-    `;
-    this.elements.stopBtn.disabled = true;
-    this.setStatus('No agent configured');
+  updateTabCount() {
+    this.elements.tabCount.textContent = `${this.tabs.length} tab${this.tabs.length !== 1 ? 's' : ''}`;
   }
 
   navigateHistory(direction) {
@@ -397,169 +305,13 @@ class CmdManaApp {
     this.elements.statusText.textContent = text;
   }
 
-  showAddAgentModal() {
-    this.editingAgentId = null;
-    this.elements.modalTitle.textContent = 'Add Agent';
-    this.elements.agentName.value = '';
-    this.elements.agentCommand.value = '';
-    this.elements.agentArgs.value = '';
-    this.elements.agentCwd.value = '';
-    this.elements.agentEnv.value = '';
-    this.elements.agentModal.classList.add('show');
-    this.elements.agentName.focus();
-  }
-
-  hideAgentModal() {
-    this.elements.agentModal.classList.remove('show');
-    this.editingAgentId = null;
-  }
-
-  async saveAgent() {
-    const name = this.elements.agentName.value.trim();
-    const command = this.elements.agentCommand.value.trim();
-    
-    if (!name || !command) {
-      alert('Please fill in agent name and command');
-      return;
-    }
-    
-    const agent = {
-      id: this.editingAgentId || null,
-      name: name,
-      command: command,
-      args: this.elements.agentArgs.value.trim(),
-      cwd: this.elements.agentCwd.value.trim(),
-      env: this.elements.agentEnv.value.trim()
-    };
-    
-    await api.saveAgent(agent);
-    await this.loadAgents();
-    this.renderAgentList();
-    this.hideAgentModal();
-    
-    if (!this.editingAgentId) {
-      this.createTab(agent);
-    } else {
-      const tab = this.tabs.find(t => t.agentId === agent.id);
-      if (tab) {
-        tab.name = agent.name;
-        tab.command = agent.command;
-        tab.args = agent.args;
-        tab.cwd = agent.cwd;
-        tab.env = agent.env;
-        this.renderTabs();
-      }
-    }
-    
-    this.setStatus(`Agent saved: ${name}`);
-  }
-
-  editAgent(agentId) {
-    const agent = this.agents.find(a => a.id === agentId);
-    if (!agent) return;
-    
-    this.editingAgentId = agentId;
-    this.elements.modalTitle.textContent = 'Edit Agent';
-    this.elements.agentName.value = agent.name;
-    this.elements.agentCommand.value = agent.command;
-    this.elements.agentArgs.value = agent.args || '';
-    this.elements.agentCwd.value = agent.cwd || '';
-    this.elements.agentEnv.value = agent.env || '';
-    this.elements.agentModal.classList.add('show');
-  }
-
-  showManageModal() {
-    this.renderAgentList();
-    this.elements.manageModal.classList.add('show');
-  }
-
-  hideManageModal() {
-    this.elements.manageModal.classList.remove('show');
-  }
-
-  renderAgentList() {
-    if (this.agents.length === 0) {
-      this.elements.agentList.innerHTML = `
-        <div class="empty-state">
-          <p>No agents configured</p>
-          <button class="btn-primary" onclick="app.showAddAgentModal()">Add Agent</button>
-        </div>
-      `;
-      return;
-    }
-    
-    this.elements.agentList.innerHTML = this.agents.map(agent => `
-      <div class="agent-item">
-        <div class="agent-info">
-          <div class="agent-name">${this.escapeHtml(agent.name)}</div>
-          <div class="agent-command">${this.escapeHtml(agent.command)} ${this.escapeHtml(agent.args || '')}</div>
-        </div>
-        <div class="agent-actions">
-          <button class="edit-btn" onclick="app.editAgent('${agent.id}')">Edit</button>
-          <button class="delete-btn" onclick="app.deleteAgent('${agent.id}')">Delete</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  async deleteAgent(agentId) {
-    this.showConfirm('Are you sure you want to delete this agent?', async () => {
-      await api.deleteAgent(agentId);
-      await this.loadAgents();
-      this.renderAgentList();
-      
-      const tabsToClose = this.tabs.filter(t => t.agentId === agentId);
-      tabsToClose.forEach(tab => this.removeTab(tab.id));
-      
-      this.setStatus('Agent deleted');
-    });
-  }
-
-  showConfirm(message, callback) {
-    this.elements.confirmMessage.textContent = message;
-    this.confirmCallback = callback;
-    this.elements.confirmModal.classList.add('show');
-  }
-
-  hideConfirmModal() {
-    this.elements.confirmModal.classList.remove('show');
-    this.confirmCallback = null;
-  }
-
-  confirmAction() {
-    if (this.confirmCallback) {
-      this.confirmCallback();
-    }
-    this.hideConfirmModal();
-  }
-
-  toggleTheme() {
-    this.settings.theme = this.settings.theme === 'dark' ? 'light' : 'dark';
-    api.saveSettings(this.settings);
-    
-    if (this.settings.theme === 'light') {
-      document.documentElement.style.setProperty('--bg-primary', '#F8FAFC');
-      document.documentElement.style.setProperty('--bg-secondary', '#E2E8F0');
-      document.documentElement.style.setProperty('--bg-tertiary', '#CBD5E1');
-      document.documentElement.style.setProperty('--text-primary', '#1E293B');
-      document.documentElement.style.setProperty('--text-secondary', '#64748B');
-      document.documentElement.style.setProperty('--border', '#CBD5E1');
-      this.elements.themeToggleBtn.querySelector('.icon').textContent = '☀️';
-    } else {
-      document.documentElement.style.setProperty('--bg-primary', '#1E1E2E');
-      document.documentElement.style.setProperty('--bg-secondary', '#2A2A3E');
-      document.documentElement.style.setProperty('--bg-tertiary', '#363650');
-      document.documentElement.style.setProperty('--text-primary', '#E2E8F0');
-      document.documentElement.style.setProperty('--text-secondary', '#94A3B8');
-      document.documentElement.style.setProperty('--border', '#3F3F5A');
-      this.elements.themeToggleBtn.querySelector('.icon').textContent = '🌙';
-    }
-  }
-
   escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }
 
