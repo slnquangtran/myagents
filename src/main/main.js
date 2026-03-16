@@ -88,32 +88,34 @@ ipcMain.handle('save-settings', (event, settings) => {
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
   return new Promise((resolve, reject) => {
     try {
-      const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
-      const args = process.platform === 'win32' ? ['-NoExit', '-Command'] : [];
+      console.log(`[CmdMana] Spawning shell for ${tabId}`);
       
-      const proc = spawn(shell, args, {
+      const proc = spawn('cmd.exe', ['/Q'], {
         cwd: cwd || process.cwd(),
         env: process.env,
         windowsHide: false,
-        shell: false,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: 'pipe'
       });
 
+      console.log(`[CmdMana] Process created with PID: ${proc.pid}`);
       processes.set(tabId, proc);
 
       proc.stdout.on('data', (data) => {
+        console.log(`[CmdMana] stdout: ${data.toString().substring(0, 50)}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
         }
       });
 
       proc.stderr.on('data', (data) => {
+        console.log(`[CmdMana] stderr: ${data.toString().substring(0, 50)}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
         }
       });
 
       proc.on('close', (code) => {
+        console.log(`[CmdMana] Process closed with code: ${code}`);
         processes.delete(tabId);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('shell-exit', { tabId, code });

@@ -34,22 +34,24 @@ class CmdManaApp {
   bindEvents() {
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     
-    this.elements.terminalInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+    document.addEventListener('keydown', (e) => {
+      console.log('Document keydown:', e.key, 'target:', e.target.tagName);
+      
+      // Handle Enter in the terminal input
+      if (e.target === this.elements.terminalInput && e.key === 'Enter') {
+        e.preventDefault();
         this.sendCommand();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.target === this.elements.terminalInput && e.key === 'ArrowUp') {
         e.preventDefault();
         this.navigateHistory(-1);
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.target === this.elements.terminalInput && e.key === 'ArrowDown') {
         e.preventDefault();
         this.navigateHistory(1);
-      } else if (e.key === 'c' && e.ctrlKey) {
+      } else if (e.target === this.elements.terminalInput && e.key === 'c' && e.ctrlKey) {
         e.preventDefault();
         this.sendCtrlC();
       }
-    });
-    
-    document.addEventListener('keydown', (e) => {
+      
       if (e.ctrlKey && e.key === 't') {
         e.preventDefault();
         this.createTab();
@@ -211,9 +213,14 @@ class CmdManaApp {
 
   async sendCommand() {
     const command = this.elements.terminalInput.value;
-    if (!command.trim()) return;
+    console.log('sendCommand called, command:', command);
+    if (!command.trim()) {
+      this.elements.terminalInput.value = '';
+      return;
+    }
     
     const tab = this.tabs.find(t => t.id === this.activeTabId);
+    console.log('Tab active:', tab?.active, 'PID:', tab?.pid);
     if (!tab || !tab.active) {
       this.elements.terminalInput.value = '';
       return;
@@ -221,6 +228,7 @@ class CmdManaApp {
     
     this.commandHistory.push(command);
     this.historyIndex = this.commandHistory.length;
+    console.log('Sending input to:', this.activeTabId, 'data:', command + '\r\n');
     
     await api.sendInput({
       tabId: this.activeTabId,
