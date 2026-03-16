@@ -1,5 +1,15 @@
 const { api } = window;
 
+function handleKey(e) {
+  console.log('handleKey called:', e.key);
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (window.app) {
+      window.app.sendCommand();
+    }
+  }
+}
+
 class CmdManaApp {
   constructor() {
     this.tabs = [];
@@ -323,4 +333,4 @@ class CmdManaApp {
   }
 }
 
-const app = new CmdManaApp();
+window.app = new CmdManaApp();
