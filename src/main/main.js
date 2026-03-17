@@ -102,31 +102,48 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
       const currentDir = cwd || process.cwd();
       const homeDir = process.env.USERPROFILE || process.env.HOME || '';
       
-      // Build comprehensive PATH
-      const paths = [
+      const env = { ...process.env };
+      const systemPath = env.PATH || '';
+      const npmPaths = [];
+      
+      // Find npm global path
+      const npmGlobalPaths = [
         path.join(homeDir, 'AppData', 'Roaming', 'npm'),
         path.join(homeDir, 'AppData', 'Roaming', 'npm', 'bin'),
         path.join(homeDir, '.npm-global', 'bin'),
         path.join(homeDir, '.local', 'bin'),
-        path.join(currentDir, 'node_modules', '.bin'),
-        process.env.PATH || ''
-      ].filter(p => p && fs.existsSync(p));
+        path.join(currentDir, 'node_modules', '.bin')
+      ];
       
-      const env = { ...process.env };
-      env.PATH = paths.join(path.delimiter);
+      npmGlobalPaths.forEach(p => {
+        if (fs.existsSync(p) && !systemPath.includes(p)) {
+          npmPaths.push(p);
+        }
+      });
+      
+      // Prepend npm paths to existing PATH
+      const extraPath = npmPaths.join(path.delimiter);
+      env.PATH = extraPath ? extraPath + path.delimiter + systemPath : systemPath;
       
       // Also set npm prefix
       env.npm_config_prefix = path.join(homeDir, 'AppData', 'Roaming', 'npm');
       
-      // Choose shell
-      const shell = shellType === 'cmd' ? 'cmd.exe' : 'powershell.exe';
-      const shellArgs = shellType === 'cmd' ? ['/K'] : ['-NoExit'];
+      // Choose shell - use full path
+      let shell, shellArgs;
+      if (shellType === 'cmd') {
+        shell = process.env.COMSPEC || 'cmd.exe';
+        shellArgs = ['/K'];
+      } else {
+        shell = process.env.WINDIR ? path.join(process.env.WINDIR, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : 'powershell.exe';
+        shellArgs = ['-NoExit'];
+      }
       
       const proc = spawn(shell, shellArgs, {
         cwd: currentDir,
         env: env,
         windowsHide: false,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        shell: false
       });
 
       processes.set(tabId, proc);
