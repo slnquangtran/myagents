@@ -1,29 +1,25 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  getAgents: () => ipcRenderer.invoke('get-agents'),
-  saveAgent: (agent) => ipcRenderer.invoke('save-agent', agent),
-  deleteAgent: (agentId) => ipcRenderer.invoke('delete-agent', agentId),
-  
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
   
-  spawnProcess: (config) => ipcRenderer.invoke('spawn-process', config),
-  killProcess: (tabId) => ipcRenderer.invoke('kill-process', tabId),
+  spawnShell: (config) => ipcRenderer.invoke('spawn-shell', config),
+  killShell: (tabId) => ipcRenderer.invoke('kill-shell', tabId),
   sendInput: (data) => ipcRenderer.invoke('send-input', data),
-  isProcessRunning: (tabId) => ipcRenderer.invoke('is-process-running', tabId),
   
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
+  runAsAdmin: () => ipcRenderer.invoke('run-as-admin'),
   
-  onProcessOutput: (callback) => {
-    ipcRenderer.on('process-output', (event, data) => callback(data));
+  onShellOutput: (callback) => {
+    ipcRenderer.on('shell-output', (event, data) => callback(data));
   },
-  onProcessExit: (callback) => {
-    ipcRenderer.on('process-exit', (event, data) => callback(data));
+  onShellExit: (callback) => {
+    ipcRenderer.on('shell-exit', (event, data) => callback(data));
   },
-  onProcessError: (callback) => {
-    ipcRenderer.on('process-error', (event, data) => callback(data));
+  onShellError: (callback) => {
+    ipcRenderer.on('shell-error', (event, data) => callback(data));
   },
   
   removeAllListeners: (channel) => {
