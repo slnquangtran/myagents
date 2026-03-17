@@ -52,6 +52,21 @@ body {
   background: var(--accent);
 }
 
+.toolbar-select {
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  outline: none;
+}
+
+.toolbar-select:focus {
+  border-color: var(--accent);
+}
+
 .tab-bar {
   display: flex;
   align-items: center;

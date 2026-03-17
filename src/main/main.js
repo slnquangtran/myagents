@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const Store = require('electron-store');
 
@@ -95,20 +96,34 @@ ipcMain.handle('save-settings', (event, settings) => {
   return settings;
 });
 
-ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
+ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
   return new Promise((resolve, reject) => {
     try {
+      // Build PATH with npm global and local paths
       const npmGlobal = process.env.npm_config_prefix || 
         path.join(process.env.APPDATA || '', 'npm');
       const npmBinPath = path.join(npmGlobal, 'bin');
+      const currentDir = process.cwd();
+      const nodeModulesPath = path.join(currentDir, 'node_modules', '.bin');
       
       const env = { ...process.env };
-      if (env.PATH && !env.PATH.includes(npmBinPath)) {
-        env.PATH = npmBinPath + path.delimiter + env.PATH;
+      
+      // Add npm paths in order of priority
+      let extraPaths = [];
+      if (fs.existsSync(nodeModulesPath)) extraPaths.push(nodeModulesPath);
+      if (fs.existsSync(npmBinPath)) extraPaths.push(npmBinPath);
+      
+      if (extraPaths.length > 0) {
+        const extraPathStr = extraPaths.join(path.delimiter);
+        env.PATH = extraPathStr + path.delimiter + (env.PATH || '');
       }
       
-      const proc = spawn('powershell.exe', ['-NoExit'], {
-        cwd: cwd || process.cwd(),
+      // Choose shell: powershell or cmd
+      const shell = shellType === 'cmd' ? 'cmd.exe' : 'powershell.exe';
+      const shellArgs = shellType === 'cmd' ? ['/K'] : ['-NoExit'];
+      
+      const proc = spawn(shell, shellArgs, {
+        cwd: cwd || currentDir,
         env: env,
         windowsHide: false,
         stdio: 'pipe'

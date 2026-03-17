@@ -27,6 +27,7 @@ class CmdManaApp {
       newTabBtn2: document.getElementById('newTabBtn2'),
       adminBtn: document.getElementById('adminBtn'),
       defaultBtn: document.getElementById('defaultBtn'),
+      shellType: document.getElementById('shellType'),
       terminalOutput: document.getElementById('terminalOutput'),
       terminalInput: document.getElementById('terminalInput'),
       statusText: document.getElementById('statusText'),
@@ -98,9 +99,11 @@ class CmdManaApp {
   async createTab() {
     this.tabCounter++;
     const tabId = 'tab-' + this.tabCounter;
+    const shellType = this.elements.shellType.value;
     const tab = {
       id: tabId,
-      name: `Terminal ${this.tabCounter}`,
+      name: `${shellType === 'cmd' ? 'CMD' : 'PowerShell'} ${this.tabCounter}`,
+      shellType: shellType,
       output: '',
       active: false,
       pid: null
@@ -108,18 +111,18 @@ class CmdManaApp {
     
     this.tabs.push(tab);
     this.renderTabs();
-    await this.spawnShell(tabId);
+    await this.spawnShell(tabId, shellType);
     this.switchTab(tabId);
     this.updateTabCount();
     this.setStatus('Ready');
   }
 
-  async spawnShell(tabId) {
+  async spawnShell(tabId, shellType) {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) return;
     
     try {
-      const result = await this.api.spawnShell({ tabId });
+      const result = await this.api.spawnShell({ tabId, shellType });
       tab.pid = result.pid;
       tab.active = true;
       this.updateTabStatus(tabId);
