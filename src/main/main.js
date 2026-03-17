@@ -21,8 +21,14 @@ let mainWindow = null;
 const processes = new Map();
 
 function runAsAdmin() {
-  app.quit();
-  shell.openPath(process.execPath, { properties: 'runAsAdministrator' });
+  const { exec } = require('child_process');
+  const exePath = process.execPath;
+  
+  exec(`powershell -Command "Start-Process '${exePath}' -Verb RunAs"`, (error) => {
+    if (!error) {
+      app.quit();
+    }
+  });
 }
 
 function createWindow() {
@@ -92,12 +98,10 @@ ipcMain.handle('save-settings', (event, settings) => {
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
   return new Promise((resolve, reject) => {
     try {
-      // Get npm global bin path
       const npmGlobal = process.env.npm_config_prefix || 
         path.join(process.env.APPDATA || '', 'npm');
       const npmBinPath = path.join(npmGlobal, 'bin');
       
-      // Add npm bin to PATH
       const env = { ...process.env };
       if (env.PATH && !env.PATH.includes(npmBinPath)) {
         env.PATH = npmBinPath + path.delimiter + env.PATH;
@@ -132,7 +136,6 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
       });
 
       proc.on('error', (err) => {
-        console.error(`[CmdMana] Shell error: ${err.message}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('shell-error', { tabId, error: err.message });
         }
@@ -140,7 +143,6 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
 
       resolve({ pid: proc.pid });
     } catch (error) {
-      console.error(`[CmdMana] Failed: ${error.message}`);
       reject(error);
     }
   });
@@ -160,7 +162,6 @@ ipcMain.handle('kill-shell', (event, tabId) => {
   if (proc && !proc.killed) {
     proc.kill();
     processes.delete(tabId);
-    console.log(`[CmdMana] Shell killed for tab ${tabId}`);
     return true;
   }
   return false;
@@ -183,30 +184,33 @@ ipcMain.handle('run-as-admin', () => {
 
 ipcMain.handle('set-as-default', async () => {
   const { exec } = require('child_process');
+  const fs = require('fs');
   const exePath = process.execPath;
-  const appName = 'CmdMana';
+  const appDataPath = process.env.APPDATA;
+  const launcherPath = path.join(appDataPath, 'CmdMana', 'launcher.bat');
   
   return new Promise((resolve) => {
-    // Register as default terminal using Windows registry
-    // This sets CmdMana as the default handler for cmd.exe
+    const batchContent = `@echo off\n"${exePath}" %*\n`;
+    
+    const dir = path.dirname(launcherPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    fs.writeFileSync(launcherPath, batchContent);
+    
     const commands = [
-      // Set default open command for console programs
-      `reg add "HKCU\\Software\\Classes\\Applications\\cmd.exe\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`,
-      // Also register for powershell
-      `reg add "HKCU\\Software\\Classes\\Applications\\powershell.exe\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`,
-      // Register as default terminal handler
-      `reg add "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`
+      `reg add "HKCU\\Software\\Classes\\cmd.exe\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
+      `reg add "HKCU\\Software\\Classes\\batfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
+      `reg add "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`
     ];
     
-    let results = [];
     let completed = 0;
-    
     commands.forEach(cmd => {
-      exec(cmd, (error) => {
-        results.push(!error);
+      exec(cmd, () => {
         completed++;
         if (completed === commands.length) {
-          resolve(results.every(r => r));
+          resolve(true);
         }
       });
     });
@@ -218,8 +222,8 @@ ipcMain.handle('remove-as-default', async () => {
   
   return new Promise((resolve) => {
     const commands = [
-      `reg delete "HKCU\\Software\\Classes\\Applications\\cmd.exe\\shell\\open\\command" /f`,
-      `reg delete "HKCU\\Software\\Classes\\Applications\\powershell.exe\\shell\\open\\command" /f`,
+      `reg delete "HKCU\\Software\\Classes\\cmd.exe\\shell\\open\\command" /f`,
+      `reg delete "HKCU\\Software\\Classes\\batfile\\shell\\open\\command" /f`,
       `reg delete "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /f`
     ];
     
