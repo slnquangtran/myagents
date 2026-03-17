@@ -196,6 +196,13 @@ body {
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   font-size: 14px;
   outline: none;
+  resize: none;
+}
+
+textarea.terminal-input {
+  overflow: hidden;
+  min-height: 20px;
+  max-height: 100px;
 }
 
 .terminal-input::placeholder {

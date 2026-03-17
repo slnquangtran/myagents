@@ -1,14 +1,7 @@
-const { api } = window;
+console.log('Renderer loading...');
+console.log('window.api:', typeof window.api);
 
-function handleKey(e) {
-  console.log('handleKey called:', e.key);
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    if (window.app) {
-      window.app.sendCommand();
-    }
-  }
-}
+const electronAPI = window.api || {};
 
 class CmdManaApp {
   constructor() {
@@ -17,11 +10,13 @@ class CmdManaApp {
     this.tabCounter = 0;
     this.commandHistory = [];
     this.historyIndex = -1;
+    this.api = electronAPI;
     
     this.init();
   }
 
   async init() {
+    console.log('App initializing...');
     this.bindElements();
     this.bindEvents();
     this.setupIpcListeners();
@@ -39,46 +34,28 @@ class CmdManaApp {
       statusText: document.getElementById('statusText'),
       tabCount: document.getElementById('tabCount')
     };
+    console.log('Elements bound');
   }
 
   bindEvents() {
+    console.log('Binding events...');
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     
-    document.addEventListener('keydown', (e) => {
-      console.log('Document keydown:', e.key, 'target:', e.target.tagName);
-      
-      // Handle Enter in the terminal input
-      if (e.target === this.elements.terminalInput && e.key === 'Enter') {
-        e.preventDefault();
-        this.sendCommand();
-      } else if (e.target === this.elements.terminalInput && e.key === 'ArrowUp') {
-        e.preventDefault();
-        this.navigateHistory(-1);
-      } else if (e.target === this.elements.terminalInput && e.key === 'ArrowDown') {
-        e.preventDefault();
-        this.navigateHistory(1);
-      } else if (e.target === this.elements.terminalInput && e.key === 'c' && e.ctrlKey) {
-        e.preventDefault();
-        this.sendCtrlC();
-      }
-      
-      if (e.ctrlKey && e.key === 't') {
-        e.preventDefault();
-        this.createTab();
-      } else if (e.ctrlKey && e.key === 'w') {
-        e.preventDefault();
-        if (this.activeTabId) {
-          this.closeTab(this.activeTabId);
+    const inputEl = this.elements.terminalInput;
+    if (inputEl) {
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.sendCommand();
         }
-      } else if (e.ctrlKey && e.key === 'Tab') {
-        e.preventDefault();
-        this.switchToNextTab();
-      }
-    });
+      });
+      console.log('Input event bound');
+    }
   }
 
   setupIpcListeners() {
-    api.onShellOutput(({ tabId, data }) => {
+    console.log('Setting up IPC...');
+    this.api.onShellOutput(({ tabId, data }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.output += data;
@@ -88,7 +65,7 @@ class CmdManaApp {
       }
     });
     
-    api.onShellExit(({ tabId, code }) => {
+    this.api.onShellExit(({ tabId, code }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
@@ -102,7 +79,7 @@ class CmdManaApp {
       }
     });
     
-    api.onShellError(({ tabId, error }) => {
+    this.api.onShellError(({ tabId, error }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
@@ -115,18 +92,20 @@ class CmdManaApp {
         this.updateTabStatus(tabId);
       }
     });
+    console.log('IPC setup complete');
   }
 
   async loadSettings() {
-    this.settings = await api.getSettings();
+    this.settings = await this.api.getSettings();
   }
 
   async createTab() {
+    console.log('Creating tab...');
     this.tabCounter++;
     const tabId = 'tab-' + this.tabCounter;
     const tab = {
       id: tabId,
-      name: `CMD ${this.tabCounter}`,
+      name: `Terminal ${this.tabCounter}`,
       output: '',
       active: false,
       pid: null
@@ -138,6 +117,7 @@ class CmdManaApp {
     this.switchTab(tabId);
     this.updateTabCount();
     this.setStatus('Ready');
+    console.log('Tab created:', tabId);
   }
 
   async spawnShell(tabId) {
@@ -145,11 +125,13 @@ class CmdManaApp {
     if (!tab) return;
     
     try {
-      const result = await api.spawnShell({ tabId });
+      console.log('Spawning shell for:', tabId);
+      const result = await this.api.spawnShell({ tabId });
       tab.pid = result.pid;
       tab.active = true;
       this.updateTabStatus(tabId);
       this.setStatus(`PID: ${result.pid}`);
+      console.log('Shell spawned, PID:', result.pid);
     } catch (error) {
       tab.output += `[Failed to start shell: ${error.message}]\n`;
       this.renderOutput();
@@ -198,14 +180,6 @@ class CmdManaApp {
     }
   }
 
-  switchToNextTab() {
-    if (this.tabs.length <= 1) return;
-    
-    const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
-    const nextIndex = (currentIndex + 1) % this.tabs.length;
-    this.switchTab(this.tabs[nextIndex].id);
-  }
-
   renderOutput() {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (!tab) {
@@ -222,37 +196,37 @@ class CmdManaApp {
   }
 
   async sendCommand() {
-    const command = this.elements.terminalInput.value;
-    console.log('sendCommand called, command:', command);
+    const inputEl = this.elements.terminalInput;
+    const command = inputEl.value;
+    console.log('Sending command:', command);
+    
     if (!command.trim()) {
-      this.elements.terminalInput.value = '';
+      inputEl.value = '';
       return;
     }
     
     const tab = this.tabs.find(t => t.id === this.activeTabId);
-    console.log('Tab active:', tab?.active, 'PID:', tab?.pid);
     if (!tab || !tab.active) {
-      this.elements.terminalInput.value = '';
+      inputEl.value = '';
       return;
     }
     
     this.commandHistory.push(command);
     this.historyIndex = this.commandHistory.length;
-    console.log('Sending input to:', this.activeTabId, 'data:', command + '\r\n');
     
-    await api.sendInput({
+    await this.api.sendInput({
       tabId: this.activeTabId,
-      data: command + '\r\n'
+      data: command + '\n'
     });
     
-    this.elements.terminalInput.value = '';
+    inputEl.value = '';
   }
 
   async sendCtrlC() {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (!tab || !tab.active) return;
     
-    await api.sendInput({
+    await this.api.sendInput({
       tabId: this.activeTabId,
       data: '\x03'
     });
@@ -263,7 +237,7 @@ class CmdManaApp {
     if (!tab) return;
     
     if (tab.active) {
-      await api.killShell(tabId);
+      await this.api.killShell(tabId);
     }
     
     this.removeTab(tabId);
@@ -281,7 +255,7 @@ class CmdManaApp {
         this.switchTab(this.tabs[newIndex].id);
       } else {
         this.activeTabId = null;
-        this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>Click + to create a new CMD tab</p></div>';
+        this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>Click + to create a new terminal</p></div>';
       }
     }
     
@@ -303,22 +277,6 @@ class CmdManaApp {
     this.elements.tabCount.textContent = `${this.tabs.length} tab${this.tabs.length !== 1 ? 's' : ''}`;
   }
 
-  navigateHistory(direction) {
-    if (this.commandHistory.length === 0) return;
-    
-    this.historyIndex += direction;
-    
-    if (this.historyIndex < 0) {
-      this.historyIndex = 0;
-    } else if (this.historyIndex >= this.commandHistory.length) {
-      this.historyIndex = this.commandHistory.length;
-      this.elements.terminalInput.value = '';
-      return;
-    }
-    
-    this.elements.terminalInput.value = this.commandHistory[this.historyIndex];
-  }
-
   setStatus(text) {
     this.elements.statusText.textContent = text;
   }
@@ -327,10 +285,9 @@ class CmdManaApp {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+      .replace(/>/g, '&gt;');
   }
 }
 
+console.log('Creating app...');
 window.app = new CmdManaApp();

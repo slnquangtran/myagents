@@ -3,24 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
-  <title>CmdMana - CMD Terminal Manager</title>
+  <title>CmdMana - Terminal Manager</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="app">
     <div class="tab-bar" id="tabBar">
       <div class="tabs-container" id="tabsContainer"></div>
-      <button class="add-tab-btn" id="newTabBtn" title="New CMD">+</button>
+      <button class="add-tab-btn" id="newTabBtn" title="New Terminal">+</button>
     </div>
 
     <div class="main-content">
       <div class="terminal-panel" id="terminalPanel">
         <div class="terminal-output" id="terminalOutput"></div>
-  <div class="terminal-input-line">
-    <span class="prompt">C:\&gt;</span>
-    <input type="text" class="terminal-input" id="terminalInput" spellcheck="false" autocomplete="off" onkeydown="handleKey(event)">
-  </div>
+        <div class="terminal-input-line">
+          <span class="prompt">C:\&gt;</span>
+          <input type="text" class="terminal-input" id="terminalInput" spellcheck="false">
+        </div>
       </div>
     </div>
 
