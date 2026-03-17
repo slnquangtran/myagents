@@ -20,6 +20,11 @@ const store = new Store({
 let mainWindow = null;
 const processes = new Map();
 
+function runAsAdmin() {
+  app.quit();
+  shell.openPath(process.execPath, { properties: 'runAsAdministrator' });
+}
+
 function createWindow() {
   const windowState = store.get('windowState');
   
@@ -87,16 +92,24 @@ ipcMain.handle('save-settings', (event, settings) => {
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd }) => {
   return new Promise((resolve, reject) => {
     try {
-      console.log(`[CmdMana] Spawning PowerShell for ${tabId}`);
+      // Get npm global bin path
+      const npmGlobal = process.env.npm_config_prefix || 
+        path.join(process.env.APPDATA || '', 'npm');
+      const npmBinPath = path.join(npmGlobal, 'bin');
+      
+      // Add npm bin to PATH
+      const env = { ...process.env };
+      if (env.PATH && !env.PATH.includes(npmBinPath)) {
+        env.PATH = npmBinPath + path.delimiter + env.PATH;
+      }
       
       const proc = spawn('powershell.exe', ['-NoExit'], {
         cwd: cwd || process.cwd(),
-        env: process.env,
+        env: env,
         windowsHide: false,
         stdio: 'pipe'
       });
 
-      console.log(`[CmdMana] Process PID: ${proc.pid}`);
       processes.set(tabId, proc);
 
       proc.stdout.on('data', (data) => {
@@ -162,4 +175,8 @@ ipcMain.handle('select-directory', async () => {
     properties: ['openDirectory']
   });
   return result.filePaths[0] || null;
+});
+
+ipcMain.handle('run-as-admin', () => {
+  runAsAdmin();
 });

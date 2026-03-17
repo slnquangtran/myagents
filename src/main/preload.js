@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
+  runAsAdmin: () => ipcRenderer.invoke('run-as-admin'),
   
   onShellOutput: (callback) => {
     ipcRenderer.on('shell-output', (event, data) => callback(data));

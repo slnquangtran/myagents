@@ -24,6 +24,8 @@ class CmdManaApp {
     this.elements = {
       tabsContainer: document.getElementById('tabsContainer'),
       newTabBtn: document.getElementById('newTabBtn'),
+      newTabBtn2: document.getElementById('newTabBtn2'),
+      adminBtn: document.getElementById('adminBtn'),
       terminalOutput: document.getElementById('terminalOutput'),
       terminalInput: document.getElementById('terminalInput'),
       statusText: document.getElementById('statusText'),
@@ -33,6 +35,8 @@ class CmdManaApp {
 
   bindEvents() {
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
+    this.elements.newTabBtn2.addEventListener('click', () => this.createTab());
+    this.elements.adminBtn.addEventListener('click', () => this.runAsAdmin());
     
     const inputEl = this.elements.terminalInput;
     if (inputEl) {
@@ -260,6 +264,12 @@ class CmdManaApp {
 
   updateTabCount() {
     this.elements.tabCount.textContent = `${this.tabs.length} tab${this.tabs.length !== 1 ? 's' : ''}`;
+  }
+
+  async runAsAdmin() {
+    if (confirm('This will restart the app as Administrator. Continue?')) {
+      await this.api.runAsAdmin();
+    }
   }
 
   setStatus(text) {
