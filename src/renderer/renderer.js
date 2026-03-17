@@ -144,13 +144,43 @@ class CmdManaApp {
       
       tabEl.innerHTML = `
         <span class="tab-status ${tab.active ? 'running' : ''}"></span>
-        <span class="tab-name">${tab.name}</span>
+        <span class="tab-name" data-tab-id="${tab.id}">${tab.name}</span>
         <button class="tab-close" title="Close tab">&times;</button>
       `;
       
       tabEl.addEventListener('click', (e) => {
         if (!e.target.classList.contains('tab-close')) {
           this.switchTab(tab.id);
+        }
+      });
+      
+      // Double-click to rename
+      tabEl.addEventListener('dblclick', (e) => {
+        if (!e.target.classList.contains('tab-close')) {
+          this.renameTab(tab.id);
+        }
+      });
+      
+      // Drag and drop
+      tabEl.draggable = true;
+      tabEl.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', tab.id);
+        tabEl.classList.add('dragging');
+      });
+      
+      tabEl.addEventListener('dragend', () => {
+        tabEl.classList.remove('dragging');
+      });
+      
+      tabEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      
+      tabEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if (draggedId && draggedId !== tab.id) {
+          this.reorderTabs(draggedId, tab.id);
         }
       });
       
@@ -290,6 +320,28 @@ class CmdManaApp {
         alert('Failed to set as default. Please try running the app as Administrator first.');
       }
     }
+  }
+
+  renameTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    
+    const newName = prompt('Enter new name for this tab:', tab.name);
+    if (newName && newName.trim()) {
+      tab.name = newName.trim();
+      this.renderTabs();
+    }
+  }
+
+  reorderTabs(draggedId, targetId) {
+    const draggedIndex = this.tabs.findIndex(t => t.id === draggedId);
+    const targetIndex = this.tabs.findIndex(t => t.id === targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    const [draggedTab] = this.tabs.splice(draggedIndex, 1);
+    this.tabs.splice(targetIndex, 0, draggedTab);
+    this.renderTabs();
   }
 
   setStatus(text) {

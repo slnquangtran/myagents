@@ -105,10 +105,16 @@ body {
   white-space: nowrap;
   min-width: 100px;
   max-width: 180px;
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 .tab:hover {
   background: #404060;
+}
+
+.tab.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
 }
 
 .tab.active {

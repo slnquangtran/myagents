@@ -99,31 +99,31 @@ ipcMain.handle('save-settings', (event, settings) => {
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
   return new Promise((resolve, reject) => {
     try {
-      // Build PATH with npm global and local paths
-      const npmGlobal = process.env.npm_config_prefix || 
-        path.join(process.env.APPDATA || '', 'npm');
-      const npmBinPath = path.join(npmGlobal, 'bin');
-      const currentDir = process.cwd();
-      const nodeModulesPath = path.join(currentDir, 'node_modules', '.bin');
+      const currentDir = cwd || process.cwd();
+      const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+      
+      // Build comprehensive PATH
+      const paths = [
+        path.join(homeDir, 'AppData', 'Roaming', 'npm'),
+        path.join(homeDir, 'AppData', 'Roaming', 'npm', 'bin'),
+        path.join(homeDir, '.npm-global', 'bin'),
+        path.join(homeDir, '.local', 'bin'),
+        path.join(currentDir, 'node_modules', '.bin'),
+        process.env.PATH || ''
+      ].filter(p => p && fs.existsSync(p));
       
       const env = { ...process.env };
+      env.PATH = paths.join(path.delimiter);
       
-      // Add npm paths in order of priority
-      let extraPaths = [];
-      if (fs.existsSync(nodeModulesPath)) extraPaths.push(nodeModulesPath);
-      if (fs.existsSync(npmBinPath)) extraPaths.push(npmBinPath);
+      // Also set npm prefix
+      env.npm_config_prefix = path.join(homeDir, 'AppData', 'Roaming', 'npm');
       
-      if (extraPaths.length > 0) {
-        const extraPathStr = extraPaths.join(path.delimiter);
-        env.PATH = extraPathStr + path.delimiter + (env.PATH || '');
-      }
-      
-      // Choose shell: powershell or cmd
+      // Choose shell
       const shell = shellType === 'cmd' ? 'cmd.exe' : 'powershell.exe';
       const shellArgs = shellType === 'cmd' ? ['/K'] : ['-NoExit'];
       
       const proc = spawn(shell, shellArgs, {
-        cwd: cwd || currentDir,
+        cwd: currentDir,
         env: env,
         windowsHide: false,
         stdio: 'pipe'
