@@ -10,10 +10,16 @@
     "build:portable": "electron-builder --win portable",
     "build:nsis": "electron-builder --win nsis"
   },
-  "keywords": ["terminal", "cmd", "manager", "tabs"],
+  "keywords": [
+    "terminal",
+    "cmd",
+    "manager",
+    "tabs"
+  ],
   "author": "Quang",
   "license": "MIT",
   "dependencies": {
+    "ansi-to-html": "^0.7.2",
     "electron-store": "^8.2.0"
   },
   "devDependencies": {
@@ -30,11 +36,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico"

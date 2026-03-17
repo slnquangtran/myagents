@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const Store = require('electron-store');
+const AnsiToHtml = require('ansi-to-html');
+
+const ansiConverter = new AnsiToHtml({
+  fg: '#cccccc',
+  bg: '#1e1e2e',
+  newline: true,
+  escapeXML: true
+});
 
 const store = new Store({
   name: 'cmdmana-config',
@@ -150,13 +158,15 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
 
       proc.stdout.on('data', (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
+          const str = data.toString();
+          mainWindow.webContents.send('shell-output', { tabId, data: str, html: ansiConverter.toHtml(str) });
         }
       });
 
       proc.stderr.on('data', (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell-output', { tabId, data: data.toString() });
+          const str = data.toString();
+          mainWindow.webContents.send('shell-output', { tabId, data: str, html: ansiConverter.toHtml(str) });
         }
       });
 

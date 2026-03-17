@@ -53,10 +53,11 @@ class CmdManaApp {
   }
 
   setupIpcListeners() {
-    this.api.onShellOutput(({ tabId, data }) => {
+    this.api.onShellOutput(({ tabId, data, html }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.output += data;
+        tab.outputHtml = (tab.outputHtml || '') + html;
         if (tabId === this.activeTabId) {
           this.renderOutput();
         }
@@ -212,7 +213,11 @@ class CmdManaApp {
       return;
     }
     
-    this.elements.terminalOutput.innerHTML = this.escapeHtml(tab.output);
+    if (tab.outputHtml) {
+      this.elements.terminalOutput.innerHTML = tab.outputHtml;
+    } else {
+      this.elements.terminalOutput.innerHTML = this.escapeHtml(tab.output);
+    }
     this.scrollToBottom();
   }
 
