@@ -1,6 +1,3 @@
-console.log('Renderer loading...');
-console.log('window.api:', typeof window.api);
-
 const electronAPI = window.api || {};
 
 class CmdManaApp {
@@ -16,12 +13,10 @@ class CmdManaApp {
   }
 
   async init() {
-    console.log('App initializing...');
     this.bindElements();
     this.bindEvents();
     this.setupIpcListeners();
     await this.loadSettings();
-    
     this.createTab();
   }
 
@@ -34,11 +29,9 @@ class CmdManaApp {
       statusText: document.getElementById('statusText'),
       tabCount: document.getElementById('tabCount')
     };
-    console.log('Elements bound');
   }
 
   bindEvents() {
-    console.log('Binding events...');
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     
     const inputEl = this.elements.terminalInput;
@@ -49,12 +42,10 @@ class CmdManaApp {
           this.sendCommand();
         }
       });
-      console.log('Input event bound');
     }
   }
 
   setupIpcListeners() {
-    console.log('Setting up IPC...');
     this.api.onShellOutput(({ tabId, data }) => {
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
@@ -92,7 +83,6 @@ class CmdManaApp {
         this.updateTabStatus(tabId);
       }
     });
-    console.log('IPC setup complete');
   }
 
   async loadSettings() {
@@ -100,7 +90,6 @@ class CmdManaApp {
   }
 
   async createTab() {
-    console.log('Creating tab...');
     this.tabCounter++;
     const tabId = 'tab-' + this.tabCounter;
     const tab = {
@@ -117,7 +106,6 @@ class CmdManaApp {
     this.switchTab(tabId);
     this.updateTabCount();
     this.setStatus('Ready');
-    console.log('Tab created:', tabId);
   }
 
   async spawnShell(tabId) {
@@ -125,13 +113,11 @@ class CmdManaApp {
     if (!tab) return;
     
     try {
-      console.log('Spawning shell for:', tabId);
       const result = await this.api.spawnShell({ tabId });
       tab.pid = result.pid;
       tab.active = true;
       this.updateTabStatus(tabId);
       this.setStatus(`PID: ${result.pid}`);
-      console.log('Shell spawned, PID:', result.pid);
     } catch (error) {
       tab.output += `[Failed to start shell: ${error.message}]\n`;
       this.renderOutput();
@@ -198,7 +184,6 @@ class CmdManaApp {
   async sendCommand() {
     const inputEl = this.elements.terminalInput;
     const command = inputEl.value;
-    console.log('Sending command:', command);
     
     if (!command.trim()) {
       inputEl.value = '';
@@ -289,5 +274,4 @@ class CmdManaApp {
   }
 }
 
-console.log('Creating app...');
 window.app = new CmdManaApp();

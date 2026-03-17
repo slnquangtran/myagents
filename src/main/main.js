@@ -39,18 +39,8 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    console.log('Page loaded');
-  });
-  
-  mainWindow.webContents.on('console-message', (event, level, message) => {
-    console.log('Console:', message);
-  });
-
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools();
-    console.log('[CmdMana] Application started');
   });
 
   mainWindow.on('resize', () => {
