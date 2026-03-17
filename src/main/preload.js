@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
   runAsAdmin: () => ipcRenderer.invoke('run-as-admin'),
+  setAsDefault: () => ipcRenderer.invoke('set-as-default'),
+  removeAsDefault: () => ipcRenderer.invoke('remove-as-default'),
   
   onShellOutput: (callback) => {
     ipcRenderer.on('shell-output', (event, data) => callback(data));

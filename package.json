@@ -1,15 +1,16 @@
 {
   "name": "cmdmana",
   "version": "1.0.0",
-  "description": "AI Agent CLI Manager - Run multiple AI agents in tabs",
+  "description": "Terminal Manager - Run multiple cmd/powershell in tabs",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
     "build": "electron-builder --win --x64",
-    "pack": "electron-builder --dir"
+    "build:portable": "electron-builder --win portable",
+    "build:nsis": "electron-builder --win nsis"
   },
-  "keywords": ["ai", "cli", "agent", "terminal", "manager"],
+  "keywords": ["terminal", "cmd", "manager", "tabs"],
   "author": "Quang",
   "license": "MIT",
   "dependencies": {
@@ -28,17 +29,26 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
           "target": "portable",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "icon": "assets/icon.ico"
     },
     "files": [
       "src/**/*"
     ],
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CmdMana"
     },
     "electronDist": "node_modules/electron/dist",
     "electronVersion": "31.0.0"

@@ -26,6 +26,7 @@ class CmdManaApp {
       newTabBtn: document.getElementById('newTabBtn'),
       newTabBtn2: document.getElementById('newTabBtn2'),
       adminBtn: document.getElementById('adminBtn'),
+      defaultBtn: document.getElementById('defaultBtn'),
       terminalOutput: document.getElementById('terminalOutput'),
       terminalInput: document.getElementById('terminalInput'),
       statusText: document.getElementById('statusText'),
@@ -37,6 +38,7 @@ class CmdManaApp {
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     this.elements.newTabBtn2.addEventListener('click', () => this.createTab());
     this.elements.adminBtn.addEventListener('click', () => this.runAsAdmin());
+    this.elements.defaultBtn.addEventListener('click', () => this.setAsDefault());
     
     const inputEl = this.elements.terminalInput;
     if (inputEl) {
@@ -269,6 +271,20 @@ class CmdManaApp {
   async runAsAdmin() {
     if (confirm('This will restart the app as Administrator. Continue?')) {
       await this.api.runAsAdmin();
+    }
+  }
+
+  async setAsDefault() {
+    const confirmed = confirm('Set CmdMana as default terminal?\n\nThis will replace cmd.exe and PowerShell to open with CmdMana.\n\nYou can undo this anytime by clicking "Remove Default".');
+    if (confirmed) {
+      const success = await this.api.setAsDefault();
+      if (success) {
+        this.elements.defaultBtn.textContent = '✓ Default';
+        this.setStatus('Set as default terminal');
+        alert('CmdMana is now your default terminal!');
+      } else {
+        alert('Failed to set as default. Try running as Administrator.');
+      }
     }
   }
 

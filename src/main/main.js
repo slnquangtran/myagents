@@ -180,3 +180,57 @@ ipcMain.handle('select-directory', async () => {
 ipcMain.handle('run-as-admin', () => {
   runAsAdmin();
 });
+
+ipcMain.handle('set-as-default', async () => {
+  const { exec } = require('child_process');
+  const exePath = process.execPath;
+  const appName = 'CmdMana';
+  
+  return new Promise((resolve) => {
+    // Register as default terminal using Windows registry
+    // This sets CmdMana as the default handler for cmd.exe
+    const commands = [
+      // Set default open command for console programs
+      `reg add "HKCU\\Software\\Classes\\Applications\\cmd.exe\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`,
+      // Also register for powershell
+      `reg add "HKCU\\Software\\Classes\\Applications\\powershell.exe\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`,
+      // Register as default terminal handler
+      `reg add "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /ve /d "\\"${exePath}\\" \\"%1\\"" /f`
+    ];
+    
+    let results = [];
+    let completed = 0;
+    
+    commands.forEach(cmd => {
+      exec(cmd, (error) => {
+        results.push(!error);
+        completed++;
+        if (completed === commands.length) {
+          resolve(results.every(r => r));
+        }
+      });
+    });
+  });
+});
+
+ipcMain.handle('remove-as-default', async () => {
+  const { exec } = require('child_process');
+  
+  return new Promise((resolve) => {
+    const commands = [
+      `reg delete "HKCU\\Software\\Classes\\Applications\\cmd.exe\\shell\\open\\command" /f`,
+      `reg delete "HKCU\\Software\\Classes\\Applications\\powershell.exe\\shell\\open\\command" /f`,
+      `reg delete "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /f`
+    ];
+    
+    let completed = 0;
+    commands.forEach(cmd => {
+      exec(cmd, () => {
+        completed++;
+        if (completed === commands.length) {
+          resolve(true);
+        }
+      });
+    });
+  });
+});
