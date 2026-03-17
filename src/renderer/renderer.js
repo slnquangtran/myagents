@@ -275,15 +275,16 @@ class CmdManaApp {
   }
 
   async setAsDefault() {
-    const confirmed = confirm('Set CmdMana as default terminal?\n\nThis will replace cmd.exe and PowerShell to open with CmdMana.\n\nYou can undo this anytime by clicking "Remove Default".');
+    const confirmed = confirm('Set CmdMana as default terminal?\n\nYou will be asked to allow admin access to modify system settings.\n\nThis will replace cmd.exe, .bat and .cmd files to open with CmdMana.');
     if (confirmed) {
+      this.setStatus('Setting as default... please accept admin prompt');
       const success = await this.api.setAsDefault();
       if (success) {
         this.elements.defaultBtn.textContent = '✓ Default';
         this.setStatus('Set as default terminal');
         alert('CmdMana is now your default terminal!');
       } else {
-        alert('Failed to set as default. Try running as Administrator.');
+        alert('Failed to set as default. Please try running the app as Administrator first.');
       }
     }
   }

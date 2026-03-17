@@ -187,31 +187,52 @@ ipcMain.handle('set-as-default', async () => {
   const fs = require('fs');
   const exePath = process.execPath;
   const appDataPath = process.env.APPDATA;
-  const launcherPath = path.join(appDataPath, 'CmdMana', 'launcher.bat');
+  const scriptPath = path.join(appDataPath, 'CmdMana', 'set-default.ps1');
+  
+  // PowerShell script to set as default with admin rights
+  const psScript = `
+$exePath = "${exePath.replace(/\\/g, '\\\\')}"
+$regCmds = @(
+    "reg add 'HKLM\\SOFTWARE\\Classes\\cmdfile\\shell\\open\\command' /ve /d \"\\\"$exePath\\\" \\\"%1\\\"\" /f",
+    "reg add 'HKLM\\SOFTWARE\\Classes\\batfile\\shell\\open\\command' /ve /d \"\\\"$exePath\\\" \\\"%1\\\"\" /f", 
+    "reg add 'HKLM\\SOFTWARE\\Classes\\Application\\cmd.exe\\shell\\open\\command' /ve /d \"\\\"$exePath\\\" \\\"%1\\\"\" /f"
+)
+foreach ($cmd in $regCmds) {
+    Start-Process powershell -ArgumentList "-Command","$cmd" -Verb RunAs -Wait
+}
+Write-Output "Done"
+`;
   
   return new Promise((resolve) => {
-    const batchContent = `@echo off\n"${exePath}" %*\n`;
-    
-    const dir = path.dirname(launcherPath);
+    // Write PowerShell script
+    const dir = path.dirname(scriptPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    fs.writeFileSync(scriptPath, psScript);
     
-    fs.writeFileSync(launcherPath, batchContent);
-    
-    const commands = [
-      `reg add "HKCU\\Software\\Classes\\cmd.exe\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
-      `reg add "HKCU\\Software\\Classes\\batfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
-      `reg add "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`
-    ];
-    
-    let completed = 0;
-    commands.forEach(cmd => {
-      exec(cmd, () => {
-        completed++;
-        if (completed === commands.length) {
-          resolve(true);
-        }
+    // Execute with elevation
+    exec(`powershell -ExecutionPolicy Bypass -File "${scriptPath}"`, (error) => {
+      // Also set user-level defaults as backup
+      const exePath2 = process.execPath;
+      const launcherPath = path.join(appDataPath, 'CmdMana', 'launcher.bat');
+      const batchContent = `@echo off\n"${exePath2}" %*\n`;
+      fs.writeFileSync(launcherPath, batchContent);
+      
+      const userCmds = [
+        `reg add "HKCU\\Software\\Classes\\cmd.exe\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
+        `reg add "HKCU\\Software\\Classes\\batfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`,
+        `reg add "HKCU\\Software\\Classes\\cmdfile\\shell\\open\\command" /ve /d "\\"${launcherPath}\\"" /f`
+      ];
+      
+      let completed = 0;
+      userCmds.forEach(cmd => {
+        exec(cmd, () => {
+          completed++;
+          if (completed === userCmds.length) {
+            resolve(true);
+          }
+        });
       });
     });
   });
