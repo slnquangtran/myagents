@@ -1,10 +1,13 @@
 const electronAPI = window.api || {};
 
+console.log('xterm loaded:', typeof Terminal);
+
 class CmdManaApp {
   constructor() {
     this.tabs = [];
     this.activeTabId = null;
     this.tabCounter = 0;
+    this.terminals = new Map();
     this.commandHistory = [];
     this.historyIndex = -1;
     this.api = electronAPI;
@@ -26,6 +29,8 @@ class CmdManaApp {
       newTabBtn: document.getElementById('newTabBtn'),
       newTabBtn2: document.getElementById('newTabBtn2'),
       adminBtn: document.getElementById('adminBtn'),
+      defaultBtn: document.getElementById('defaultBtn'),
+      shellType: document.getElementById('shellType'),
       terminalOutput: document.getElementById('terminalOutput'),
       terminalInput: document.getElementById('terminalInput'),
       statusText: document.getElementById('statusText'),
@@ -37,55 +42,54 @@ class CmdManaApp {
     this.elements.newTabBtn.addEventListener('click', () => this.createTab());
     this.elements.newTabBtn2.addEventListener('click', () => this.createTab());
     this.elements.adminBtn.addEventListener('click', () => this.runAsAdmin());
+    this.elements.defaultBtn.addEventListener('click', () => this.setAsDefault());
     
-    const inputEl = this.elements.terminalInput;
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.sendCommand();
-        }
-      });
-    }
+    this.elements.terminalInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.sendCommand();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.historyUp();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.historyDown();
+      }
+    });
   }
 
   setupIpcListeners() {
     this.api.onShellOutput(({ tabId, data }) => {
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (tab) {
-        tab.output += data;
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-        }
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(data);
       }
     });
     
     this.api.onShellExit(({ tabId, code }) => {
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Process exited with code ${code}]\r\n`);
+      }
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
-        tab.output += `\n[Process exited with code ${code}]\n`;
-        
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-          this.setStatus('Process exited');
-        }
         this.updateTabStatus(tabId);
       }
+      this.setStatus('Process exited');
     });
     
     this.api.onShellError(({ tabId, error }) => {
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Error: ${error}]\r\n`);
+      }
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
-        tab.output += `\n[Error: ${error}]\n`;
-        
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-          this.setStatus(`Error: ${error}`);
-        }
         this.updateTabStatus(tabId);
       }
+      this.setStatus(`Error: ${error}`);
     });
   }
 
@@ -93,38 +97,68 @@ class CmdManaApp {
     this.settings = await this.api.getSettings();
   }
 
+  createTerminal(tabId) {
+    if (typeof Terminal === 'undefined') {
+      console.error('Terminal not loaded!');
+      return null;
+    }
+    
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: 'Consolas, "Courier New", monospace',
+      theme: {
+        background: '#1a1a2e',
+        foreground: '#f8f8f2',
+        cursor: '#f8f8f2',
+        selection: '#44475a'
+      }
+    });
+
+    term.open(this.elements.terminalOutput);
+    this.terminals.set(tabId, { term });
+    
+    return term;
+  }
+
   async createTab() {
     this.tabCounter++;
     const tabId = 'tab-' + this.tabCounter;
+    const shellType = this.elements.shellType.value;
     const tab = {
       id: tabId,
-      name: `Terminal ${this.tabCounter}`,
-      output: '',
+      name: `${shellType === 'cmd' ? 'CMD' : 'PowerShell'} ${this.tabCounter}`,
+      shellType: shellType,
       active: false,
       pid: null
     };
     
     this.tabs.push(tab);
     this.renderTabs();
-    await this.spawnShell(tabId);
+    
+    this.createTerminal(tabId);
+    await this.spawnShell(tabId, shellType);
     this.switchTab(tabId);
     this.updateTabCount();
     this.setStatus('Ready');
   }
 
-  async spawnShell(tabId) {
+  async spawnShell(tabId, shellType) {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) return;
     
     try {
-      const result = await this.api.spawnShell({ tabId });
+      const result = await this.api.spawnShell({ tabId, shellType });
       tab.pid = result.pid;
       tab.active = true;
       this.updateTabStatus(tabId);
       this.setStatus(`PID: ${result.pid}`);
+      this.elements.terminalInput.focus();
     } catch (error) {
-      tab.output += `[Failed to start shell: ${error.message}]\n`;
-      this.renderOutput();
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Failed to start shell: ${error.message}]\r\n`);
+      }
       this.setStatus(`Error: ${error.message}`);
     }
   }
@@ -149,6 +183,34 @@ class CmdManaApp {
         }
       });
       
+      tabEl.addEventListener('dblclick', (e) => {
+        if (!e.target.classList.contains('tab-close')) {
+          this.renameTab(tab.id);
+        }
+      });
+      
+      tabEl.draggable = true;
+      tabEl.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', tab.id);
+        tabEl.classList.add('dragging');
+      });
+      
+      tabEl.addEventListener('dragend', () => {
+        tabEl.classList.remove('dragging');
+      });
+      
+      tabEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      
+      tabEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if (draggedId && draggedId !== tab.id) {
+          this.reorderTabs(draggedId, tab.id);
+        }
+      });
+      
       tabEl.querySelector('.tab-close').addEventListener('click', (e) => {
         e.stopPropagation();
         this.closeTab(tab.id);
@@ -161,7 +223,15 @@ class CmdManaApp {
   switchTab(tabId) {
     this.activeTabId = tabId;
     this.renderTabs();
-    this.renderOutput();
+    
+    this.elements.terminalOutput.innerHTML = '';
+    
+    const termData = this.terminals.get(tabId);
+    if (termData) {
+      termData.term.open(this.elements.terminalOutput);
+    }
+    
+    this.elements.terminalInput.value = '';
     this.elements.terminalInput.focus();
     
     const tab = this.tabs.find(t => t.id === tabId);
@@ -170,33 +240,15 @@ class CmdManaApp {
     }
   }
 
-  renderOutput() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab) {
-      this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>No tab selected</p></div>';
-      return;
-    }
-    
-    this.elements.terminalOutput.innerHTML = this.escapeHtml(tab.output);
-    this.scrollToBottom();
-  }
-
-  scrollToBottom() {
-    this.elements.terminalOutput.scrollTop = this.elements.terminalOutput.scrollHeight;
-  }
-
   async sendCommand() {
-    const inputEl = this.elements.terminalInput;
-    const command = inputEl.value;
+    const command = this.elements.terminalInput.value;
     
     if (!command.trim()) {
-      inputEl.value = '';
       return;
     }
     
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (!tab || !tab.active) {
-      inputEl.value = '';
       return;
     }
     
@@ -205,20 +257,29 @@ class CmdManaApp {
     
     await this.api.sendInput({
       tabId: this.activeTabId,
-      data: command + '\n'
+      data: command + '\r\n'
     });
     
-    inputEl.value = '';
+    this.elements.terminalInput.value = '';
   }
 
-  async sendCtrlC() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab || !tab.active) return;
+  historyUp() {
+    if (this.commandHistory.length === 0) return;
     
-    await this.api.sendInput({
-      tabId: this.activeTabId,
-      data: '\x03'
-    });
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.elements.terminalInput.value = this.commandHistory[this.historyIndex];
+    }
+  }
+
+  historyDown() {
+    if (this.historyIndex < this.commandHistory.length - 1) {
+      this.historyIndex++;
+      this.elements.terminalInput.value = this.commandHistory[this.historyIndex];
+    } else {
+      this.historyIndex = this.commandHistory.length;
+      this.elements.terminalInput.value = '';
+    }
   }
 
   async closeTab(tabId) {
@@ -227,6 +288,12 @@ class CmdManaApp {
     
     if (tab.active) {
       await this.api.killShell(tabId);
+    }
+    
+    const termData = this.terminals.get(tabId);
+    if (termData) {
+      termData.term.dispose();
+      this.terminals.delete(tabId);
     }
     
     this.removeTab(tabId);
@@ -272,15 +339,45 @@ class CmdManaApp {
     }
   }
 
-  setStatus(text) {
-    this.elements.statusText.textContent = text;
+  async setAsDefault() {
+    const confirmed = confirm('Set CmdMana as default terminal?\n\nYou will be asked to allow admin access to modify system settings.\n\nThis will replace cmd.exe, .bat and .cmd files to open with CmdMana.');
+    if (confirmed) {
+      this.setStatus('Setting as default... please accept admin prompt');
+      const success = await this.api.setAsDefault();
+      if (success) {
+        this.elements.defaultBtn.textContent = '✓ Default';
+        this.setStatus('Set as default terminal');
+        alert('CmdMana is now your default terminal!');
+      } else {
+        alert('Failed to set as default. Please try running the app as Administrator first.');
+      }
+    }
   }
 
-  escapeHtml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+  renameTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    
+    const newName = prompt('Enter new name for this tab:', tab.name);
+    if (newName && newName.trim()) {
+      tab.name = newName.trim();
+      this.renderTabs();
+    }
+  }
+
+  reorderTabs(draggedId, targetId) {
+    const draggedIndex = this.tabs.findIndex(t => t.id === draggedId);
+    const targetIndex = this.tabs.findIndex(t => t.id === targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    const [draggedTab] = this.tabs.splice(draggedIndex, 1);
+    this.tabs.splice(targetIndex, 0, draggedTab);
+    this.renderTabs();
+  }
+
+  setStatus(text) {
+    this.elements.statusText.textContent = text;
   }
 }
 

@@ -5,11 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CmdMana - Terminal Manager</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="lib/xterm.css">
 </head>
 <body>
   <div id="app">
     <div class="toolbar">
       <button class="toolbar-btn" id="adminBtn" title="Run as Administrator">🛡️ Admin</button>
+      <button class="toolbar-btn" id="defaultBtn" title="Set as Default Terminal">📌 Set as Default</button>
+      <select class="toolbar-select" id="shellType">
+        <option value="powershell">PowerShell</option>
+        <option value="cmd">CMD</option>
+      </select>
       <button class="toolbar-btn" id="newTabBtn" title="New Terminal">+ New Tab</button>
     </div>
 
@@ -22,8 +28,8 @@
       <div class="terminal-panel" id="terminalPanel">
         <div class="terminal-output" id="terminalOutput"></div>
         <div class="terminal-input-line">
-          <span class="prompt">C:\&gt;</span>
-          <input type="text" class="terminal-input" id="terminalInput" spellcheck="false">
+          <span class="prompt">PS C:\&gt;</span>
+          <input type="text" id="terminalInput" class="terminal-input" spellcheck="false" autocomplete="off" autofocus>
         </div>
       </div>
     </div>
@@ -35,6 +41,7 @@
     </div>
   </div>
 
+  <script src="lib/xterm.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
