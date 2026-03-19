@@ -7,9 +7,27 @@ const AnsiToHtml = require('ansi-to-html');
 
 const ansiConverter = new AnsiToHtml({
   fg: '#cccccc',
-  bg: '#1e1e2e',
+  bg: '#1a1a2e',
   newline: true,
-  escapeXML: true
+  escapeXML: false,
+  colors: {
+    0: '#1a1a2e',
+    1: '#ff5555',
+    2: '#50fa7b',
+    3: '#f1fa8c',
+    4: '#8be9fd',
+    5: '#ff79c6',
+    6: '#8be9fd',
+    7: '#f8f8f2',
+    8: '#6272a4',
+    9: '#ff6e6e',
+    10: '#69ff94',
+    11: '#ffffa5',
+    12: '#d6acff',
+    13: '#ff92df',
+    14: '#a4ffff',
+    15: '#ffffff'
+  }
 });
 
 const store = new Store({
@@ -105,6 +123,7 @@ ipcMain.handle('save-settings', (event, settings) => {
 });
 
 ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
+  console.log('spawn-shell called:', tabId, shellType);
   return new Promise((resolve, reject) => {
     try {
       const currentDir = cwd || process.cwd();
@@ -184,13 +203,16 @@ ipcMain.handle('spawn-shell', async (event, { tabId, cwd, shellType }) => {
       });
 
       resolve({ pid: proc.pid });
+      console.log('Shell spawned successfully, PID:', proc.pid);
     } catch (error) {
+      console.log('Shell spawn error:', error.message);
       reject(error);
     }
   });
 });
 
 ipcMain.handle('send-input', (event, { tabId, data }) => {
+  console.log('send-input called:', tabId, data);
   const proc = processes.get(tabId);
   if (proc && !proc.killed && proc.stdin.writable) {
     proc.stdin.write(data);

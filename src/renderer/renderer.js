@@ -1,10 +1,13 @@
 const electronAPI = window.api || {};
 
+console.log('xterm loaded:', typeof Terminal);
+
 class CmdManaApp {
   constructor() {
     this.tabs = [];
     this.activeTabId = null;
     this.tabCounter = 0;
+    this.terminals = new Map();
     this.commandHistory = [];
     this.historyIndex = -1;
     this.api = electronAPI;
@@ -41,60 +44,81 @@ class CmdManaApp {
     this.elements.adminBtn.addEventListener('click', () => this.runAsAdmin());
     this.elements.defaultBtn.addEventListener('click', () => this.setAsDefault());
     
-    const inputEl = this.elements.terminalInput;
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.sendCommand();
-        }
-      });
-    }
+    this.elements.terminalInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.sendCommand();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.historyUp();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.historyDown();
+      }
+    });
   }
 
   setupIpcListeners() {
-    this.api.onShellOutput(({ tabId, data, html }) => {
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (tab) {
-        tab.output += data;
-        tab.outputHtml = (tab.outputHtml || '') + html;
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-        }
+    this.api.onShellOutput(({ tabId, data }) => {
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(data);
       }
     });
     
     this.api.onShellExit(({ tabId, code }) => {
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Process exited with code ${code}]\r\n`);
+      }
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
-        tab.output += `\n[Process exited with code ${code}]\n`;
-        
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-          this.setStatus('Process exited');
-        }
         this.updateTabStatus(tabId);
       }
+      this.setStatus('Process exited');
     });
     
     this.api.onShellError(({ tabId, error }) => {
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Error: ${error}]\r\n`);
+      }
       const tab = this.tabs.find(t => t.id === tabId);
       if (tab) {
         tab.active = false;
-        tab.output += `\n[Error: ${error}]\n`;
-        
-        if (tabId === this.activeTabId) {
-          this.renderOutput();
-          this.setStatus(`Error: ${error}`);
-        }
         this.updateTabStatus(tabId);
       }
+      this.setStatus(`Error: ${error}`);
     });
   }
 
   async loadSettings() {
     this.settings = await this.api.getSettings();
+  }
+
+  createTerminal(tabId) {
+    if (typeof Terminal === 'undefined') {
+      console.error('Terminal not loaded!');
+      return null;
+    }
+    
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: 'Consolas, "Courier New", monospace',
+      theme: {
+        background: '#1a1a2e',
+        foreground: '#f8f8f2',
+        cursor: '#f8f8f2',
+        selection: '#44475a'
+      }
+    });
+
+    term.open(this.elements.terminalOutput);
+    this.terminals.set(tabId, { term });
+    
+    return term;
   }
 
   async createTab() {
@@ -105,13 +129,14 @@ class CmdManaApp {
       id: tabId,
       name: `${shellType === 'cmd' ? 'CMD' : 'PowerShell'} ${this.tabCounter}`,
       shellType: shellType,
-      output: '',
       active: false,
       pid: null
     };
     
     this.tabs.push(tab);
     this.renderTabs();
+    
+    this.createTerminal(tabId);
     await this.spawnShell(tabId, shellType);
     this.switchTab(tabId);
     this.updateTabCount();
@@ -128,9 +153,12 @@ class CmdManaApp {
       tab.active = true;
       this.updateTabStatus(tabId);
       this.setStatus(`PID: ${result.pid}`);
+      this.elements.terminalInput.focus();
     } catch (error) {
-      tab.output += `[Failed to start shell: ${error.message}]\n`;
-      this.renderOutput();
+      const termData = this.terminals.get(tabId);
+      if (termData) {
+        termData.term.write(`\r\n[Failed to start shell: ${error.message}]\r\n`);
+      }
       this.setStatus(`Error: ${error.message}`);
     }
   }
@@ -145,7 +173,7 @@ class CmdManaApp {
       
       tabEl.innerHTML = `
         <span class="tab-status ${tab.active ? 'running' : ''}"></span>
-        <span class="tab-name" data-tab-id="${tab.id}">${tab.name}</span>
+        <span class="tab-name">${tab.name}</span>
         <button class="tab-close" title="Close tab">&times;</button>
       `;
       
@@ -155,14 +183,12 @@ class CmdManaApp {
         }
       });
       
-      // Double-click to rename
       tabEl.addEventListener('dblclick', (e) => {
         if (!e.target.classList.contains('tab-close')) {
           this.renameTab(tab.id);
         }
       });
       
-      // Drag and drop
       tabEl.draggable = true;
       tabEl.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', tab.id);
@@ -197,7 +223,15 @@ class CmdManaApp {
   switchTab(tabId) {
     this.activeTabId = tabId;
     this.renderTabs();
-    this.renderOutput();
+    
+    this.elements.terminalOutput.innerHTML = '';
+    
+    const termData = this.terminals.get(tabId);
+    if (termData) {
+      termData.term.open(this.elements.terminalOutput);
+    }
+    
+    this.elements.terminalInput.value = '';
     this.elements.terminalInput.focus();
     
     const tab = this.tabs.find(t => t.id === tabId);
@@ -206,37 +240,15 @@ class CmdManaApp {
     }
   }
 
-  renderOutput() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab) {
-      this.elements.terminalOutput.innerHTML = '<div class="empty-state"><p>No tab selected</p></div>';
-      return;
-    }
-    
-    if (tab.outputHtml) {
-      this.elements.terminalOutput.innerHTML = tab.outputHtml;
-    } else {
-      this.elements.terminalOutput.innerHTML = this.escapeHtml(tab.output);
-    }
-    this.scrollToBottom();
-  }
-
-  scrollToBottom() {
-    this.elements.terminalOutput.scrollTop = this.elements.terminalOutput.scrollHeight;
-  }
-
   async sendCommand() {
-    const inputEl = this.elements.terminalInput;
-    const command = inputEl.value;
+    const command = this.elements.terminalInput.value;
     
     if (!command.trim()) {
-      inputEl.value = '';
       return;
     }
     
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (!tab || !tab.active) {
-      inputEl.value = '';
       return;
     }
     
@@ -245,20 +257,29 @@ class CmdManaApp {
     
     await this.api.sendInput({
       tabId: this.activeTabId,
-      data: command + '\n'
+      data: command + '\r\n'
     });
     
-    inputEl.value = '';
+    this.elements.terminalInput.value = '';
   }
 
-  async sendCtrlC() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!tab || !tab.active) return;
+  historyUp() {
+    if (this.commandHistory.length === 0) return;
     
-    await this.api.sendInput({
-      tabId: this.activeTabId,
-      data: '\x03'
-    });
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.elements.terminalInput.value = this.commandHistory[this.historyIndex];
+    }
+  }
+
+  historyDown() {
+    if (this.historyIndex < this.commandHistory.length - 1) {
+      this.historyIndex++;
+      this.elements.terminalInput.value = this.commandHistory[this.historyIndex];
+    } else {
+      this.historyIndex = this.commandHistory.length;
+      this.elements.terminalInput.value = '';
+    }
   }
 
   async closeTab(tabId) {
@@ -267,6 +288,12 @@ class CmdManaApp {
     
     if (tab.active) {
       await this.api.killShell(tabId);
+    }
+    
+    const termData = this.terminals.get(tabId);
+    if (termData) {
+      termData.term.dispose();
+      this.terminals.delete(tabId);
     }
     
     this.removeTab(tabId);
@@ -351,13 +378,6 @@ class CmdManaApp {
 
   setStatus(text) {
     this.elements.statusText.textContent = text;
-  }
-
-  escapeHtml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
   }
 }
 
